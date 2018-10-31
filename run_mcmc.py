@@ -23,7 +23,7 @@ rank = comm.Get_rank()
 
 if rank == 0:
     now = datetime.datetime.now()
-    dirname = "/home/user/work/theory/halo_model_Flender/MCMC/test/{0:%Y-%m-%d}".format(now)
+    dirname = "/Users/ethlau/Research/Power_Spectrum/halo_model_Flender/MCMC/test/{0:%Y-%m-%d}".format(now)
     if os.path.exists(dirname) == False:
         os.mkdir(dirname)
     else:
@@ -58,7 +58,7 @@ Omega_b=0.046100
 w0=-1.000000
 Omega_k=0.000000
 n_s=0.972000
-inputPk="/home/user/work/theory/halo_model_Flender/MCMC/wmap9_fid_matterpower_z0.dat"
+inputPk="/Users/ethlau/Research/Power_Spectrum/MCMC_CPS/wmap9_fid_matterpower_z0.dat"
 xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, inputPk)
 
 def lnlike(theta, x, y, invcov):
@@ -80,24 +80,37 @@ def lnlike(theta, x, y, invcov):
     #alpha0, n_nt, beta, eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod = theta
     #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
 
+    eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope = theta
+
     #fix non-thermal pressure term
-    eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break = theta
     alpha0 = 0.18
     n_nt = 0.80
     beta = 0.50
     x_smooth = 0.01
-    n_nt_mod = 0.80    
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1.e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
-    
-    model = xx_power.return_xx_power(x) # [cm^-2 s^-1 arcsec^-2]^2
-    diff = np.array(y-model, dtype=np.float64)    
+    n_nt_mod = 0.80
+
+    x_break = 0.1
+
+    #clumping terms
+    clump0 = 0.0
+    clump_zslope = 0.0
+    x_clump = 1.0
+    alpha_clump1 = 0.0
+    alpha_clump2 = 0.0
+
+    #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1.e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
+
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1.e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+
+    model = xx_power.return_xx_power(x) # [erg cm^-2 s^-1 str^-1]^2
+    diff = np.array(y-model, dtype=np.float64)
     lnl = -0.5*np.dot(diff, np.dot(invcov, np.transpose(diff)))
     return lnl
-        
+
 def lnprior(theta):
-    eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break= theta
+    eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope = theta
     # see https://arxiv.org/pdf/1610.08029.pdf
-    if 0.1 <= eps_f <= 10.0 and 0.0 <= eps_DM <= 0.10 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.1 <= A_C <= 3.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 and 0.05 <= x_break <= 0.30:
+    if 0.1 <= eps_f <= 10.0 and 0.0 <= eps_DM <= 0.10 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.1 <= A_C <= 3.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 :
         return 0.0
     else:
         return -np.inf
@@ -108,14 +121,41 @@ def lnprob(theta, x, y, invcov):
         return -np.inf
     return lp + lnlike(theta, x, y, invcov)
 
-'''
+
 # read data
+'''
 file="dvec.dat"
 df = pd.read_csv(file, delim_whitespace=True, header=None)
 df.columns=['ell', 'cl_xx']
 x = np.array(df['ell'])
 y = np.array(df['cl_xx'])
+'''
 
+def read_data (filename) :
+    ell = []
+    cl = []
+    var = []
+    with open(filename,'r') as f:
+        f.readline()
+        for line in f:
+            cols = line.split(' ')
+            ell.append(float(cols[0]))
+            cl.append(float(cols[1]))
+            var.append(float(cols[2]))
+
+    ell = np.array(ell)
+    cl = np.array(cl)
+    var = np.array(var)
+
+    return ell, cl, var
+
+ell,cl,var = read_data('rosat_R4_R7_mask_hfi_R2.txt')
+
+icov = np.zeros((var.size,var.size))
+for i in xrange(var.size) :
+    icov[i,i] = 1.0/var[i]
+
+'''
 nvec=y.size
 
 file="invcov.dat"
@@ -125,6 +165,7 @@ icov = np.array(df['icov'])
 icovtd = icov.reshape(nvec, nvec)
 '''
 
+'''
 # generate test data
 I_E = 1.478585e+01 # X-ray mean intensity [cm^-2 s^-1 str^-1]
 A_eff = 500.0      # effective area [cm^2]
@@ -149,13 +190,13 @@ s_data = np.array([I_E, A_eff, T_obs, sigma_b, dlnell, fsky])
 def data_and_cov(x, theta, theta_n):
     alpha0, n_nt, beta, eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod = theta
     I_E, A_eff, T_obs, sigma_b, dlnell, fsky = theta_n
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
     fac = (41252.96) * (60.0*60.0) * (60.0*60.0) / (4.*np.pi) # arcsec^2/str
-    data = xx_power.return_xx_power(x) # [cm^-2 s^-1 arcsec^-2]^2
-    
-    N_photon = I_E * A_eff * T_obs # photon/str
-    I_E = I_E / fac # cm^-2 s^-1 arcsec^-2    
-    data_n = I_E * I_E / N_photon
+    data = xx_power.return_xx_power(x) # [ergs cm ^-2 s^-1 str^-2]^2
+
+    #N_photon = I_E * A_eff * T_obs # photon/str
+    #I_E = I_E / fac # cm^-2 s^-1 arcsec^-2
+    #data_n = I_E * I_E / N_photon
 
     icov = np.zeros((x.size, x.size))
     for i in range(x.size):
@@ -167,20 +208,22 @@ def data_and_cov(x, theta, theta_n):
         mu, sigma = 0.0, np.sqrt(cov)
         stat_n = np.random.normal(mu, sigma, 1)
         data[i] = data[i] + stat_n
-        
+
         icov[i,i] = 1./cov
 
     return data, icov
 
-x = np.array(ell)
-y, icovtd = data_and_cov(x, p_data, s_data)
+'''
+
+#x = np.array(ell)
+#y, icovtd = data_and_cov(x, p_data, s_data)
 
 #if rank == 0:
 #    print (x, y)
 #    print (icovtd)
 
 #initial paramaters for MCMC
-pinit  = np.array([1.0,0.0050000,0.026000,0.120000,1.000000,0.100000,1.720000,0.195000])
+pinit  = np.array([1.0,0.0050000,0.026000,0.120000,1.000000,0.100000,1.720000])
 
 # chain will be seved every nstep. In total nbunch * nstep samplings.
 nbunch = 25
@@ -192,8 +235,12 @@ if not pool.is_master():
     pool.wait()
     sys.exit(0)
 
+x = ell
+y = cl
+icovtd = icov
+
 # run MCMC
-ndim = 8
+ndim = pinit.size
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y, icovtd), pool=pool)
 start = time.time()
 
@@ -204,7 +251,7 @@ for i in range(nbunch):
         pos = sampler.chain[:,-1,:]
     sampler.run_mcmc(pos, nstep)
 
-    chains="chains_"+str(i) 
+    chains="chains_"+str(i)
     filename_bunch_chains = os.path.join(dirname, chains)
     np.save(filename_bunch_chains, sampler.chain)
     logging.info("%s/%s bunch completed. File written in %s" % (i+1, nbunch, filename_bunch_chains))
