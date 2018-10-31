@@ -19,6 +19,8 @@
 
 #include "cfortran.h"
 
+#define BOOST_PYTHON_MAX_ARITY 20
+
 #define MAXBINS 500
 
 double tarray[ntmax]; //keV
@@ -66,6 +68,11 @@ struct Flender_param{
   double x_break; // fiducial : 0.195
   double x_smooth; // fiducial : 0.01
   double n_nt_mod; // fiducial : 0.80
+  double clump0;
+  double clump_zslope;
+  double x_clump;
+  double alpha_clump1;
+  double alpha_clump2;
 };
 
 static struct Flender_param F;
@@ -156,7 +163,7 @@ void free_cosmology(){
   free_halo_info();
 }
 
-void set_Flender_params(double p0, double p1, double p2, double p3, double p4, double p5, double p6, double p7, double p8, double p9, double p10, double p11, double p12){
+void set_Flender_params(double p0, double p1, double p2, double p3, double p4, double p5, double p6, double p7, double p8, double p9, double p10, double p11, double p12, double p13, double p14, double p15, double p16, double p17) {
   F.alpha0 =p0;
   F.n_nt   =p1;
   F.beta   =p2;
@@ -170,6 +177,11 @@ void set_Flender_params(double p0, double p1, double p2, double p3, double p4, d
   F.x_break =p10;
   F.x_smooth =p11;
   F.n_nt_mod =p12;
+  F.clump0 =p13;
+  F.clump_zslope =p14;
+  F.x_clump =p15;
+  F.alpha_clump1 =p16;
+  F.alpha_clump2 =p17;
 }
 
 npy::ndarray return_xx_power(npy::ndarray x_input){
@@ -344,7 +356,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 	double l_ls = ell_bin/ells;
 												
 	for(int il=0;il<Nell;il++){
-	  tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * Mpc2cm; // count/s/cm^2/arcsec^2/Mpc
+	  tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * Mpc2cm; // ergs/s/cm^2/str/Mpc
 	}
 				
 	double xl;
@@ -449,6 +461,12 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, float
   float x_break = F.x_break;
   float x_smooth = F.x_smooth;
 
+  float clump0 = F.clump0;
+  float clump_zslope = F.clump_zslope;
+  float x_clump = F.x_clump;
+  float alpha_clump1 = F.alpha_clump1;
+  float alpha_clump2 = F.alpha_clump2;
+
   int pturbrad = 2;
   bool verbose = false;
   float Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0;
@@ -512,10 +530,24 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, float
     r = (double) x[xi]*R500;
     if(r >= Rmax){emi = 0.0;}
     else{
+        /*
         double ngas,pressure, kT;
         pressure = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth);
         ngas = icm_mod.return_ngas_mod(r, R500, x_break, npoly_mod);
         kT = pressure/ngas;
+        */
+
+        double ngas,pressure, kT, clump, clump1;
+        pressure = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth); //keV cm^-3
+        ngas = icm_mod.return_ngas_mod(r, R500, x_break, npoly_mod); //cm^-3
+        kT = pressure/ngas; // keV
+    
+        clump1 = icm_mod.return_clumpf(r, R500, clump0, x_clump, alpha_clump1, alpha_clump2) - 1.0;
+        clump1 *= pow(1.+Redshift, clump_zslope);
+        clump = 1.0 + clump1;
+        if (clump < 1.0) clump = 1.0;
+        ngas *= sqrt(clump);
+
         emi = icm_mod.return_xray_emissivity(ngas, kT, Redshift); // ergs/s/cm^3
         //emi = icm_mod.calc_xray_emissivity(r, R500, Redshift); // count/s/cm^3
     } 
