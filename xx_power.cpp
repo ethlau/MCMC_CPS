@@ -77,6 +77,8 @@ struct Flender_param{
 
 static struct Flender_param F;
 
+double calc_Flender_xray_flux (cosmo cosm_model, float z, float Mvir, std::vector<float> x);
+
 void free_FFTdata();
 void FFT_density_profile(double *output, double *bin, int nbin);
 
@@ -184,7 +186,7 @@ void set_Flender_params(double p0, double p1, double p2, double p3, double p4, d
   F.alpha_clump2 =p17;
 }
 
-npy::ndarray return_xx_power(npy::ndarray x_input){
+npy::ndarray return_xx_power(npy::ndarray x_input, float flux_lim){
   int nzbin = 11;
   float zmin = 1e-3;
   float zmax = 2.8;
@@ -227,6 +229,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
   double tab_l_ls[Nx];
   double bin[Nx];
   double tab_yl_int[Nx];
+  double flux[nmbin][nzbin];
   
   double *tab_Fourier;
   tab_Fourier = (double *) malloc(sizeof(double) * Nx * nzbin * nmbin);
@@ -254,7 +257,8 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
       //cout << zlist[i] << " " << Mlist[j] << endl;
 			
       std::vector<double> emission;
-      emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist); // ph/s/cm^3/arcsec^2
+      emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist); // ergs/s/cm^3/arcsec^2
+      flux[i][j] = calc_Flender_xray_flux (cosm_model, z_fft[i], M_fft[j], xlist); //ergs/s/cm^2
       tab_r500[j+nmbin*i] = R500_here;
       
       double yp1 = 1.e31;
@@ -289,7 +293,6 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 			
     }
   }
-  
   
   /* Start computing a halo model */
   int nd = x_input.get_nd();
@@ -329,7 +332,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
   double cl_xx_2_int_m[nmbin], cl_xx_2_int_m2[nmbin];
   
   for(int i=0;i<Nbin;i++){
-    double ell_bin     = lbin[i];						
+    double ell_bin = lbin[i];						
     double cl_xx_1=0.0, cl_xx_2=0.0;
 				
     for(int iz=0;iz<nzbin;iz++){
@@ -344,44 +347,43 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
       double Pk = gfac*gfac*PowerSpec(calc_k);
 			
       for(int jm=0;jm<nmbin;jm++){
+        if ( flux[iz][jm] < flux_lim ) continue;			
+	    double logMvir = dlogm*(double)(1.*jm) + logMvir_min;
+	    mlist[jm] = logMvir;
 				
-	double logMvir = dlogm*(double)(1.*jm) + logMvir_min;
-	mlist[jm] = logMvir;
+	    double Mvir = pow(10., logMvir) * H0/100; // in the unit of Msun/h
+	    double r500 = tab_r500[jm+nmbin*iz];
 				
-	double Mvir = pow(10., logMvir) * H0/100; // in the unit of Msun/h			       
-	double r500 = tab_r500[jm+nmbin*iz];
+	    double ells = covd/(1+zhere)/r500; // = ell_500
 				
-	double ells = covd/(1+zhere)/r500; // = ell_500
-				
-	double l_ls = ell_bin/ells;
+	    double l_ls = ell_bin/ells;
 												
-	for(int il=0;il<Nell;il++){
-	  tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * Mpc2cm; // ergs/s/cm^2/str/Mpc
-	}
+	    for(int il=0;il<Nell;il++){
+	        tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * Mpc2cm; // ergs/s/cm^2/str/Mpc
+	    }
 				
-	double xl;
-	int index;
+	    double xl;
+	    int index;
 				
-	index=-1;
-	for(int il=0;il<Nell-1;il++){
-	  if(tab_l_ls[il] < log10(l_ls) && log10(l_ls) < tab_l_ls[il+1]){
-	    index = il;
-	  }
-	}
+	    index = -1;
+	    for(int il=0;il<Nell-1;il++){
+	        if(tab_l_ls[il] < log10(l_ls) && log10(l_ls) < tab_l_ls[il+1]){
+	            index = il;
+	        }
+	    }
 				
-	if(index < 0){
-	  xl = 0;
-	}else{
-	  xl = (tab_fc_int[index+1]-tab_fc_int[index])/(tab_l_ls[index+1]-tab_l_ls[index])
-	    *(log10(l_ls)-tab_l_ls[index]) + tab_fc_int[index];
-	  xl = xl * 4*M_PI*(r500/H0*100.0)/ells/ells; // count/s/cm^2/arcsec^2 
-	}
+	    if(index < 0){
+	        xl = 0;
+	    } else {
+	        xl = (tab_fc_int[index+1]-tab_fc_int[index])/(tab_l_ls[index+1]-tab_l_ls[index])*(log10(l_ls)-tab_l_ls[index]) + tab_fc_int[index];
+	        xl = xl * 4*M_PI*(r500/H0*100.0)/ells/ells; // ergs/s/cm^2/str 
+	    }
 				
-	double mf = dndlogm_fast(log10(Mvir), zhere);
-	double b = halo_bias_fast(log10(Mvir), zhere);
+	    double mf = dndlogm_fast(log10(Mvir), zhere);
+	    double b = halo_bias_fast(log10(Mvir), zhere);
 								
-	cl_xx_1_int_m[jm] = mf * xl * xl;
-	cl_xx_2_int_m[jm] = mf * b * xl;
+	    cl_xx_1_int_m[jm] = mf * xl * xl;
+	    cl_xx_2_int_m[jm] = mf * b * xl;
 
       }
 						
@@ -434,6 +436,132 @@ BOOST_PYTHON_MODULE( xx_power ){
   py::def("free_cosmology", free_cosmology);
   py::def("set_Flender_params", set_Flender_params);
   py::def("return_xx_power", return_xx_power);
+}
+
+
+double calc_Flender_xray_flux (cosmo cosm_model, float z, float Mvir, std::vector<float> x){
+	
+  float conc_norm = F.A_C;
+  float conc_mass_norm = 1.0;
+  float ad_index = 5.0; // Gamma = 1+1./ad_index in arXiv:1706.08972
+  
+  /*
+    float delta_rel = 0.18, delta_rel_n = 0.8, delta_rel_zslope = 0.5; // delta_rel = alpha_0, delta_rel_n  = n_nt, delta_rel_zslope =  beta in Shaw et al 2010
+  
+    float eps_fb = 3.97e-6; // epsilon_f in arXiv:1706.08972
+    float eps_dm = 0.0; // epsilon_DM in arXiv:1706.08972
+    float fs_0 = 0.026; // f_star in arXiv:1706.08972
+    float fs_alpha = 0.12; // S_star in arXiv:1706.08972
+  */
+  float delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  float eps_fb = F.eps_f;
+  float eps_dm = F.eps_DM;
+  float fs_0 = F.f_star;
+  float fs_alpha = F.S_star;
+
+  float gamma_mod0 = F.gamma_mod0;
+  float gamma_mod_zslope = F.gamma_mod_zslope;
+  float x_break = F.x_break;
+  float x_smooth = F.x_smooth;
+
+  float clump0 = F.clump0;
+  float clump_zslope = F.clump_zslope;
+  float x_clump = F.x_clump;
+  float alpha_clump1 = F.alpha_clump1;
+  float alpha_clump2 = F.alpha_clump2;
+
+  int pturbrad = 2;
+  bool verbose = false;
+  float Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0;
+  float Omega_M = cosm_model.get_Omega_M();
+  float Omega_b = cosm_model.get_Omega_b();
+  float h =cosm_model.get_H0()/100.0;
+  float E;
+  // set cluster overdensity
+  // this is the overdensity within which mass defined (i.e. \Delta)
+  // set to -1.0 for virial radius, or 200 for M200 (rhocrit)
+  float overden_id = -1.0; // 200 for delta=200 rho-c , -1 for delta=vir x rho-c
+  int relation = 3; // concentration relation
+  float rcutoff = 2.0;
+	
+  float Redshift = z;
+  cosmic_t = cosm_model.cosmic_time(Redshift);
+  cosmic_t0 = cosm_model.cosmic_time(0.0);
+  E = cosm_model.Efact(Redshift);
+  
+  cluster nfwclus(Mvir, Redshift, overden_id, relation, cosm_model);
+	
+  //nfwclus.concentration(conc_norm, conc_mass_norm); // set halo concentration using M-c relation of Duffy et al (08)
+  //M500 = nfwclus.get_mass_overden(500.0);// Msun
+  //R500 = nfwclus.get_rad_overden(500.0);// (physical) Mpc
+  //Rvir = nfwclus.get_radius();
+	
+  float cvir = conc_norm * c_vir_DK15_fast(z, Mvir*h);
+  nfwclus.set_conc(cvir);
+  M500 = nfwclus.get_mass_overden(500.0);// Msun
+  R500 = nfwclus.get_rad_overden(500.0);// (physical) Mpc
+  Rvir = nfwclus.get_radius();
+	
+  gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
+	
+  icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
+  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+  icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
+  icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.findxs();
+	
+  icm_mod.solve_gas_model(verbose, 1e-5);
+	
+  double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
+	
+  double r, emi, dlum;
+  double luminosity = 0.0;
+  double flux = 0.0;
+
+  // distances in Mpc
+  //double D_A = cosm_model.ang_diam(Redshift);
+  double D_L = cosm_model.lum_dist(Redshift);
+
+  float npoly_mod, gamma_mod;
+  gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
+  npoly_mod = 1.0/(gamma_mod - 1.0 );
+
+  double dvol[x.size()]; // radial shell vol in cm^3
+  for(int xi=0;xi<x.size();xi++){
+    r = (double) x[xi]*R500;
+    if ( xi == 0 ) {
+        dvol[xi] = 4.0*M_PI*pow(r*megapc, 3.0);
+    } else {
+        dvol[xi] = 4.0*M_PI*pow(r*megapc, 3.0) - dvol[xi-1];
+    }
+  }
+  for(int xi=0;xi<x.size();xi++){
+    // r in Mpc;
+    r = (double) x[xi]*R500;
+    if(r >= Rmax){
+        emi = 0.0;
+    } else{
+        double ngas,pressure, kT, clump, clump1;
+        pressure = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth); //keV cm^-3
+        ngas = icm_mod.return_ngas_mod(r, R500, x_break, npoly_mod); //cm^-3
+        kT = pressure/ngas; // keV
+    
+        clump1 = icm_mod.return_clumpf(r, R500, clump0, x_clump, alpha_clump1, alpha_clump2) - 1.0;
+        clump1 *= pow(1.+Redshift, clump_zslope);
+        clump = 1.0 + clump1;
+        if (clump < 1.0) clump = 1.0;
+        ngas *= sqrt(clump);
+
+        emi = icm_mod.return_xray_emissivity(ngas, kT, Redshift); // ergs/s/cm^3
+        //emi = icm_mod.calc_xray_emissivity(r, R500, Redshift); // ergs/s/cm^3
+        dlum = emi * dvol[xi]; // ergs/s
+    } 
+    
+    luminosity += dlum;		
+  }
+  flux = luminosity/(4.0*M_PI*D_L*D_L);	//ergs/s/cm^2
+  return flux;	
 }
 
 std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, float z, float Mvir, std::vector<float> x){
