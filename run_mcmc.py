@@ -21,9 +21,11 @@ from mpi4py import MPI
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 
+flux_lim = 3.86e-13
+
 if rank == 0:
     now = datetime.datetime.now()
-    dirname = "/Users/ethlau/Research/Power_Spectrum/halo_model_Flender/MCMC/test/{0:%Y-%m-%d}".format(now)
+    dirname = "/home/ethlau/projects/Power_Spectrum/halo_model_Flender/MCMC/test/{0:%Y-%m-%d}".format(now)
     if os.path.exists(dirname) == False:
         os.mkdir(dirname)
     else:
@@ -58,7 +60,7 @@ Omega_b=0.046100
 w0=-1.000000
 Omega_k=0.000000
 n_s=0.972000
-inputPk="/Users/ethlau/Research/Power_Spectrum/MCMC_CPS/wmap9_fid_matterpower_z0.dat"
+inputPk="../input_pk/wmap9_fid_matterpower_z0.dat"
 xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, inputPk)
 
 def lnlike(theta, x, y, invcov):
@@ -80,7 +82,11 @@ def lnlike(theta, x, y, invcov):
     #alpha0, n_nt, beta, eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod = theta
     #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
 
-    eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope = theta
+    eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
+
+    #fix DM profile
+    eps_DM = 0.00
+    A_C = 1.0
 
     #fix non-thermal pressure term
     alpha0 = 0.18
@@ -88,29 +94,27 @@ def lnlike(theta, x, y, invcov):
     beta = 0.50
     x_smooth = 0.01
     n_nt_mod = 0.80
-
-    x_break = 0.1
+    x_break = 0.195
 
     #clumping terms
-    clump0 = 0.0
-    clump_zslope = 0.0
-    x_clump = 1.0
-    alpha_clump1 = 0.0
-    alpha_clump2 = 0.0
+    #clump0 = 0.0
+    #clump_zslope = 0.0
+    x_clump = 1.23
+    alpha_clump1 = 0.88
+    alpha_clump2 = 3.85
 
-    #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1.e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
 
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1.e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
-
-    model = xx_power.return_xx_power(x) # [erg cm^-2 s^-1 str^-1]^2
+    model = xx_power.return_xx_power(x,flux_lim) # [erg cm^-2 s^-1 str^-1]^2
     diff = np.array(y-model, dtype=np.float64)
     lnl = -0.5*np.dot(diff, np.dot(invcov, np.transpose(diff)))
     return lnl
 
 def lnprior(theta):
-    eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope = theta
+    eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
     # see https://arxiv.org/pdf/1610.08029.pdf
-    if 0.1 <= eps_f <= 10.0 and 0.0 <= eps_DM <= 0.10 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.1 <= A_C <= 3.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 :
+    #if 0.1 <= eps_f <= 10.0 and 0.0 <= eps_DM <= 0.10 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.1 <= A_C <= 3.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 :
+    if 0.1 <= eps_f <= 10.0 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 and 0.0 <= clump0 <= 2.0 and -1.0 <= clump_zslope <= 1.0 :
         return 0.0
     else:
         return -np.inf
@@ -149,11 +153,53 @@ def read_data (filename) :
 
     return ell, cl, var
 
-ell,cl,var = read_data('rosat_R4_R7_mask_hfi_R2.txt')
+ell,cl,var = read_data('../ROSAT/rosat_R4_R7_mask_hfi_R2_small_ell.txt')
 
 icov = np.zeros((var.size,var.size))
-for i in xrange(var.size) :
+for i in range(var.size) :
     icov[i,i] = 1.0/var[i]
+#initial paramaters for MCMC
+#pinit  = np.array([1.0,0.0050000,0.026000,0.120000,1.000000,0.100000,1.720000])
+pinit  = np.array([5.0,0.026000,0.120000,0.100000,1.720000,0.67,0.0])
+
+# chain will be saved every nstep. In total nbunch * nstep samplings.
+nbunch = 25
+nstep = 1000
+#nwalkers = (size-1)*2 # (total_number_of_cores - 1)*2, this should be equal to ndim x integer
+
+nwalkers = 70  # (total_number_of_cores - 1)*2, this should be equal to ndim x integer
+pool = MPIPool(loadbalance=True)
+if not pool.is_master():
+    pool.wait()
+    sys.exit(0)
+
+# run MCMC
+ndim = pinit.size
+sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(ell,cl,icov), pool=pool)
+start = time.time()
+
+for i in range(nbunch):
+    if i == 0:
+        pos = [pinit + 1e-4*np.random.randn(ndim) for j in range(nwalkers)]
+    else :
+        pos = sampler.chain[:,-1,:]
+    sampler.run_mcmc(pos, nstep)
+
+    chains="chains_"+str(i)
+    filename_bunch_chains = os.path.join(dirname, chains)
+    np.save(filename_bunch_chains, sampler.chain)
+    logging.info("%s/%s bunch completed. File written in %s" % (i+1, nbunch, filename_bunch_chains))
+
+    lnp="lnp_"+str(i)
+    filename_bunch_lnp = os.path.join(dirname, lnp)
+    np.save(filename_bunch_lnp, sampler.lnprobability)
+    logging.info("%s/%s bunch completed. File written in %s" % (i+1, nbunch, filename_bunch_lnp))
+
+    end = time.time()
+    logging.info("Elapsed time: %s" % (end - start))
+
+pool.close()
+
 
 '''
 nvec=y.size
@@ -222,46 +268,4 @@ def data_and_cov(x, theta, theta_n):
 #    print (x, y)
 #    print (icovtd)
 
-#initial paramaters for MCMC
-pinit  = np.array([1.0,0.0050000,0.026000,0.120000,1.000000,0.100000,1.720000])
 
-# chain will be seved every nstep. In total nbunch * nstep samplings.
-nbunch = 25
-nstep = 1000
-nwalkers = (size-1)*2 # (total_number_of_cores - 1)*2, this should be equal to ndim x integer
-
-pool = MPIPool(loadbalance=False)
-if not pool.is_master():
-    pool.wait()
-    sys.exit(0)
-
-x = ell
-y = cl
-icovtd = icov
-
-# run MCMC
-ndim = pinit.size
-sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y, icovtd), pool=pool)
-start = time.time()
-
-for i in range(nbunch):
-    if i == 0:
-        pos = [pinit + 1e-4*np.random.randn(ndim) for j in range(nwalkers)]
-    else :
-        pos = sampler.chain[:,-1,:]
-    sampler.run_mcmc(pos, nstep)
-
-    chains="chains_"+str(i)
-    filename_bunch_chains = os.path.join(dirname, chains)
-    np.save(filename_bunch_chains, sampler.chain)
-    logging.info("%s/%s bunch completed. File written in %s" % (i+1, nbunch, filename_bunch_chains))
-
-    lnp="lnp_"+str(i)
-    filename_bunch_lnp = os.path.join(dirname, lnp)
-    np.save(filename_bunch_lnp, sampler.lnprobability)
-    logging.info("%s/%s bunch completed. File written in %s" % (i+1, nbunch, filename_bunch_lnp))
-
-    end = time.time()
-    logging.info("Elapsed time: %s" % (end - start))
-
-pool.close()
