@@ -25,7 +25,7 @@ flux_lim = 3.86e-13
 
 if rank == 0:
     now = datetime.datetime.now()
-    dirname = "/home/ethlau/projects/Power_Spectrum/halo_model_Flender/MCMC/test/{0:%Y-%m-%d}".format(now)
+    dirname = "../halo_model_Flender/MCMC/test/{0:%Y-%m-%d}".format(now)
     if os.path.exists(dirname) == False:
         os.mkdir(dirname)
     else:
@@ -82,7 +82,8 @@ def lnlike(theta, x, y, invcov):
     #alpha0, n_nt, beta, eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod = theta
     #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
 
-    eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
+    #eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
+    eps_f, f_star, S_star, clump0, clump_zslope = theta
 
     #fix DM profile
     eps_DM = 0.00
@@ -95,6 +96,9 @@ def lnlike(theta, x, y, invcov):
     x_smooth = 0.01
     n_nt_mod = 0.80
     x_break = 0.195
+
+    gamma_mod0 = 0.10
+    gamma_mod_zslope = 1.72
 
     #clumping terms
     #clump0 = 0.0
@@ -111,10 +115,13 @@ def lnlike(theta, x, y, invcov):
     return lnl
 
 def lnprior(theta):
-    eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
+    #eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
+    eps_f, f_star, S_star, clump0, clump_zslope = theta
     # see https://arxiv.org/pdf/1610.08029.pdf
     #if 0.1 <= eps_f <= 10.0 and 0.0 <= eps_DM <= 0.10 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.1 <= A_C <= 3.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 :
-    if 0.1 <= eps_f <= 10.0 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 and 0.0 <= clump0 <= 2.0 and -1.0 <= clump_zslope <= 1.0 :
+    #if 0.1 <= eps_f <= 10.0 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 and 0.0 <= clump0 <= 2.0 and -1.0 <= clump_zslope <= 1.0 :
+    if 0.1 <= eps_f <= 10.0 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.0 <= clump0 <= 2.0 and -1.0 <= clump_zslope <= 1.0 :
+ 
         return 0.0
     else:
         return -np.inf
@@ -160,7 +167,7 @@ for i in range(var.size) :
     icov[i,i] = 1.0/var[i]
 #initial paramaters for MCMC
 #pinit  = np.array([1.0,0.0050000,0.026000,0.120000,1.000000,0.100000,1.720000])
-pinit  = np.array([5.0,0.026000,0.120000,0.100000,1.720000,0.67,0.0])
+pinit  = np.array([5.0,0.026000,0.120000,0.67,0.0])
 
 # chain will be saved every nstep. In total nbunch * nstep samplings.
 nbunch = 25
