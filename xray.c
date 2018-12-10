@@ -13,15 +13,48 @@ double lambda_table[ntmax][nrmax];
 double tres, zres, eres, rres;
 double keV2erg = 1.602177e-9;
 
-void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax], int opt);
+void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax], double nH, int opt);
 double int_lambda_table (double temp, double redshift, double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax] );
 
-void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax], int opt){
+double wabs ( double E ) {
+
+    /* E in keV */
+
+    double sigma;
+    int i;
+
+    double emarray[14] = {0.1, 0.284, 0.4, 0.532, 0.707, 0.867, 1.303, 1.840,
+                       2.471, 3.210, 4.038, 7.111, 8.331, 10.0};
+
+    double c0[14] = {17.3, 34.6, 78.1, 71.4, 95.5, 308.9, 120.6, 141.3,
+                      202.7, 342.7, 352.2, 433.9, 629.0, 701.2};
+
+    double c1[14] = {608.1, 267.9, 18.8, 66.8, 145.8, -380.6, 169.3,
+                     146.8, 104.7, 18.7, 18.7, -2.4, 30.9, 25.2};
+
+    double c2[14] = {-2150., -476.1 ,4.3, -51.4, -61.1, 294.0, -47.7,
+                     -31.5, -17.0, 0.0, 0.0, 0.75, 0.0, 0.0};
+
+    for (i = 0; i < 14; i++ ) { 
+        if (E < emarray[i]) {
+            sigma=(c0[i]+c1[i]*E+c2[i]*E*E)/pow(E,3.0) * 1.e-24;
+            return sigma;
+        } else {
+            continue;
+        }
+    }
+    i=13;
+    sigma=(c0[i]+c1[i]*E+c2[i]*E*E)/pow(E,3.0) * 1.e-24;
+    return sigma;
+} 
+
+void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax], double nH, int opt){
   /* 
    * Tabulate X-ray emission integrated in receiver's energy range of 0.5-2.0 keV 
    * for a range of temperature and abundance   
    * Original spectrum in units of photon*cm**3/s (into 4pi angle) in emitter's frame
    * Converted to ergs*cm**3/s by multiplying E in keV and keV2erg unit conversion 
+   * nH is the galactic H column density in cm^-2 
    */
 
   char filename[256];
@@ -32,23 +65,29 @@ void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambd
   double temp, metal, redshift;
   double ebin[nemax+1],spec[nemax];
   double area[nemax];
-  double total_area;
+  double absorption[nemax];
+  double emissivity = 0.0;
+  double total_area = 1.0;
 
-  double lambda;
+  double e = 0.0;
+  double lambda = 0.0;
   double velocity,dem,density;
-  int ne, qtherm;
+  int qtherm;
 
   int ie, je, it, iz, ir, i, j;
 
   init_apec();
+
   printf("Number of bins in arrays of Energy, Temperature, Redshift = %d, %d, %d\n", nemax, ntmax, nrmax);
   printf("Energy range = [%f,%f] keV\n", emin, emax);
   printf("Temperature range = [%f,%f] keV\n", tmin, tmax);
   printf("Redshift range = [%f,%f] \n", rmin, rmax);
   eres = (emax-emin)/nemax;
   printf("Energy resolution = %f [keV]\n", eres);
+
   for (ie = 0; ie < nemax+1; ie++) {
     ebin[ie] = emin + (double)ie*eres;
+    e = (0.5*(ebin[ie]+ebin[ie+1]));
   }
 
   tres = (log10(tmax)-log10(tmin))/(ntmax);
@@ -69,19 +108,24 @@ void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambd
     //printf("%e %e %e\n", zarray[iz], zlmin, pow(10.0,zlmin+(double)iz*zres));
   }
    
-
   velocity = 0.0;
   qtherm = 1;
   dem = 1.0;
   density = 1.0;
-  ne = nemax;
 
   FILE *fd;
   char savefile[256];
   sprintf(savefile, "./apec_table.dat");
 	
   if( opt == 0 ){
-    fprintf(stdout, "Tabulating lambda...\n");
+    fprintf(stdout, "Tabulating lambda");
+
+    for (ie = 0; ie < nemax; ie++ ) {
+        e = (0.5*(ebin[ie]+ebin[ie+1]));
+        absorption[ie] = wabs(e) * nH;
+        absorption[ie] = exp( - absorption[ie] );
+        //printf("e, absorption = %e, %e\n",e, absorption[ie]);
+    }
 
     for (i = 0; i < ntmax; i++) {
       fprintf(stdout, "."); fflush(stdout);
@@ -97,16 +141,17 @@ void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambd
 	//spec is in units of photons cm^3/s/bin in receiver's frame
 	//ebin is already in receiver's frame
 	//still need to redshift photon energy when converting from photon counts to energy
-	apec ( ebin, ne, metal, temp, redshift, spec );
+	apec ( ebin, nemax, metal, temp, redshift, spec );
 	lambda = 0.0;
         
 	for (ie = 0; ie < nemax; ie++) {
 	  //printf("%e", spec[ie]);
 	  //lambda += spec[ie];
 	  //photons -> ergs
-	  double e;
           e = (0.5*(ebin[ie]+ebin[ie+1]));
-	  lambda += spec[ie]*e*keV2erg;
+	  emissivity = spec[ie]*e*keV2erg*absorption[ie];             
+          lambda += emissivity;
+
           //printf("e, lambda = %e, %e\n",e, lambda);
 	}
 	//printf("temp, z, lambda = %e %f %e\n", temp, redshift, lambda);
@@ -133,6 +178,7 @@ void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambd
     }
     fclose(fd);
 		
+    fprintf(stdout,"done!\n");
   } else {
 		
     fd = fopen(savefile, "rb");
@@ -160,7 +206,8 @@ void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambd
     fclose(fd);
 		
   }
-  printf("done reading Lambda Table.\n");
+  //fprintf(stdout, "done reading Lambda Table.\n");
+
 
   return;
 }

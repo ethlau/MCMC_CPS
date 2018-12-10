@@ -31,7 +31,7 @@ extern "C" void set_lambdaeff_table ( double zobs, char *filename,  double tarra
 extern "C" int read_effarea ( char *filename, double **energy, double **effarea );
 extern "C" double int_lambda_table (double temp, double metal, double tarray[ntmax], double zarray[nzmax], double lambda_table[ntmax][nzmax] );
 I*/
-extern "C" void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax], int opt);
+extern "C" void set_lambda_table ( double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax], double nH, int opt);
 extern "C" double int_lambda_table (double temp, double redshift, double tarray[ntmax], double rarray[nrmax], double lambda_table[ntmax][nrmax] );
 
 

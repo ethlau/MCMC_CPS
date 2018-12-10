@@ -29,7 +29,7 @@ double rarray[nrmax];
 double lambda_table[ntmax][nrmax];
 double tres, zres, eres;
 
-const double megapc = 3.0857e24; // in cm
+const double megapc = 3.0857e24; // in cm/s
 
 using namespace std;
 
@@ -119,7 +119,7 @@ void set_FFTlog_param(){
 	
   r= new double [N];
   a= new double [N];
- k= new double [N];
+  k= new double [N];
   wsave = new double [5*N];
 	
 }
@@ -148,7 +148,7 @@ struct cosmo_params{
 
 static struct cosmo_params CP;
 
-void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double Omega_k, double ns, char *inputPk){
+void init_model(double H0, double Omega_M, double Omega_b, double wt, double Omega_k, double ns, double nH, char *inputPk){
 
   set_cosmology_halo_info(inputPk, Omega_M, Omega_b, wt, H0/100.0, ns);
   CP.H0 = H0;
@@ -158,7 +158,7 @@ void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double
   CP.Omega_k = Omega_k;
   CP.ns = CP.ns;
 
-  set_lambda_table(tarray,rarray,lambda_table,1); 
+  set_lambda_table(tarray,rarray,lambda_table,nH,0); 
 }
 
 void free_cosmology(){
@@ -186,7 +186,7 @@ void set_Flender_params(double p0, double p1, double p2, double p3, double p4, d
   F.alpha_clump2 =p17;
 }
 
-npy::ndarray return_xx_power(npy::ndarray x_input, float flux_lim){
+npy::ndarray return_xx_power(npy::ndarray x_input){
   int nzbin = 31;
   float zmin = 1e-3;
   float zmax = 2.8;
@@ -255,7 +255,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input, float flux_lim){
     for(int j=0;j<nmbin;j++){
 			
       //cout << zlist[i] << " " << Mlist[j] << endl;
-      flux[i][j] = calc_Flender_xray_flux (cosm_model, z_fft[i], M_fft[j], xlist); //ergs/s/cm^2
+      //flux[i][j] = calc_Flender_xray_flux (cosm_model, z_fft[i], M_fft[j], xlist); //ergs/s/cm^2
 		
       std::vector<double> emission;
       emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist); // ergs/s/cm^3/str
@@ -364,7 +364,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input, float flux_lim){
       double Pk = gfac*gfac*PowerSpec(calc_k);
 			
       for(int jm=0;jm<nmbin;jm++){
-         if ( flux[iz][jm] >= flux_lim ) {	
+         //if ( flux[iz][jm] >= 0.0 ) {	
 	    double logMvir = dlogm*(double)(1.*jm) + logMvir_min;
 	    mlist[jm] = logMvir;
 	    double Mvir = pow(10., logMvir) * CP.H0/100; // in the unit of Msun/h
@@ -401,10 +401,10 @@ npy::ndarray return_xx_power(npy::ndarray x_input, float flux_lim){
 								
 	    cl_xx_1_int_m[jm] = mf * xl * xl;
 	    cl_xx_2_int_m[jm] = mf * b * xl;
-         } else {
-	    cl_xx_1_int_m[jm] = 0.0;
-	    cl_xx_2_int_m[jm] = 0.0;
-         }
+         //} else {
+	 //   cl_xx_1_int_m[jm] = 0.0;
+	 //   cl_xx_2_int_m[jm] = 0.0;
+         //}
 
       }
 						
@@ -451,7 +451,7 @@ BOOST_PYTHON_MODULE( xx_power ){
   Py_Initialize();
   npy::initialize();
 
-  py::def("init_cosmology", init_cosmology);
+  py::def("init_model", init_model);
   py::def("free_cosmology", free_cosmology);
   py::def("set_Flender_params", set_Flender_params);
   py::def("return_xx_power", return_xx_power);
