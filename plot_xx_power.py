@@ -92,7 +92,7 @@ def main ():
 
     ell = 10.**np.linspace(np.log10(1.),np.log10(3.e4), 1000)
 
-    theta = [5.0,0.000000,0.026000,0.120000,1.000000,0.180000,0.800000,0.500000,0.100000,1.720000,0.195000,0.010000,0.800000,0.670000,0.730000,1.230000,0.880000,3.850000]
+    theta_fid = [5.0,0.000000,0.026000,0.120000,1.000000,0.180000,0.800000,0.500000,0.100000,1.720000,0.195000,0.010000,0.800000,0.670000,0.730000,1.230000,0.880000,3.850000]
 
     param_ind_dict = {'eps_f':0, 'eps_DM':1, 'f_star':2, 'S_star':3, 'A_C':4, 'gamma_mod0':8, 'gamma_mod_zslope':9, 'clump0':13, 'clump_zslope':14}
     param_label_dict = {'eps_f':r'\epsilon_f', 'eps_DM':r'\epsilon_{DM}', 'f_star':r'f_\star', 'S_star':r'S_\star', 'A_C':r'A_C','gamma_mod0':r'\Gamma_0', 'gamma_mod_zslope':r'\beta_\Gamma', 'clump0':r'C_0', 'clump_zslope':r'\beta_C'}
@@ -101,42 +101,61 @@ def main ():
     rosat_cl *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
     rosat_cl_err = np.sqrt(rosat_var)*rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
 
-    theta_bf = [ 9.94086977e+00,  3.19781381e-02,  1.98917895e-01,  2.85712644e-03,
- -2.28851210e+01]
+    #param_list = ['eps_f', 'f_star', 'S_star', 'clump0']
+    #param_list = ['f_star', 'S_star', 'clump0']
+    param_list = ['eps_f']
 
-    theta[param_ind_dict['eps_f']] = theta_bf[0]
-    theta[param_ind_dict['f_star']] = theta_bf[1]
-    theta[param_ind_dict['S_star']] = theta_bf[2]
-    theta[param_ind_dict['clump0']] = theta_bf[3]
-    shot_noise = 10.0**theta_bf[4]
+    for param in param_list :
 
-    f = plt.figure( figsize=(5,5) )
-    ax = f.add_axes([0.18,0.16,0.75,0.75])
+        param_ind = param_ind_dict[param]
+        param_fid = theta_fid[param_ind]
+        print(param_fid)
+        param_val_list = []
+        color_list = ['C0', 'C1', 'C2', 'C3']
+       
+        for i in [1.0]:
+            param_val = param_fid * i
+            param_val_list.append(param_val)
 
-    cl = power (ell, theta)
-    cl *= ell*(ell+1)/(2.0*math.pi)
-    psn = np.full(ell.shape, shot_noise, dtype = np.float64)
-    psn *=  ell*(ell+1)/(2.0*math.pi)
-    total = cl + psn
 
-    ax.plot (ell, total, ls = '-' )
-    ax.plot (ell, cl, ls = '--')
-    ax.plot (ell, psn, ls = ':')
+        f = plt.figure( figsize=(5,5) )
+        ax = f.add_axes([0.18,0.16,0.75,0.75])
 
-    ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', label=r"ROSAT")
+        for counter ,param_val in enumerate(param_val_list) :
+            theta = theta_fid
+            theta[param_ind] = param_val
 
-    ax.set_xlim ( 10, 3e4 )
-    #ax.set_ylim ( 1e-19, 1e-13)
-    ax.set_xlabel(r'$\ell$')
-    ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}/2\pi\,[{\rm erg^{2}s^{-2}cm^{-4}str^{-2}}]$')
+            start = time.time()
+            cl = power (ell, theta)
+            print(cl)
+            end = time.time()
+            print("Elapsed time: %s" % (end - start))
+            cl *= ell*(ell+1)/(2.0*math.pi)
+            psn = np.full(ell.shape, shot_noise, dtype = np.float64)
+            psn *=  ell*(ell+1)/(2.0*math.pi)
+            total = cl + psn
 
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.legend(loc='best')
+            label_str = r'$'+param_label_dict[param]+'= %.1f $'% (param_val)
+            if param == 'eps_f' :
+                label_str = r'$'+param_label_dict[param]+r'= %.1f \times 10^{-6}$'% (param_val)
+            ax.plot (ell, total, ls = '-', color=color_list[counter], label = label_str)
+            ax.plot (ell, cl, ls = '--', color=color_list[counter])
+            ax.plot (ell, psn, ls = ':', color=color_list[counter])
 
-    outname = '../plots/bf_xxpower.pdf'
-    f.savefig(outname)
-    f.clf()
+        ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', label=r"ROSAT")
+
+        ax.set_xlim ( 10, 3e4 )
+        #ax.set_ylim ( 1e-19, 1e-13)
+        ax.set_xlabel(r'$\ell$')
+        ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}/2\pi\,[{\rm erg^{2}s^{-2}cm^{-4}str^{-2}}]$')
+
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.legend(loc='best')
+
+        outname = '../plots/'+param+'_power.pdf'
+        f.savefig(outname)
+        f.clf()
 
 
 if __name__ == "__main__" :
