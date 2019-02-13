@@ -29,7 +29,12 @@ double rarray[nrmax];
 double lambda_table[ntmax][nrmax];
 double tres, zres, eres;
 
-const double megapc = 3.0857e24; // in cm/s
+const double sigma_T = 0.665245854e-24; //(cm)^2 Thomson cross-section
+const double m_elect = 0.510998902e3; //keV/c^2
+const double Mpc2cm = 3.0856*1e18*1e6;
+const double X = 0.76;// primordial hydrogen fraction
+const double factor = (2.0*X+2.0)/(5.0*X+3.0);//conversion factor from gas pressure to electron pressure
+
 
 using namespace std;
 
@@ -53,6 +58,8 @@ struct Shaw_param{
 static struct Shaw_param S;
 
 std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, float z, float Mvir, std::vector<float> x);
+
+std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, float Mvir, std::vector<float> x);
 
 struct Flender_param{
   double alpha0; // fiducial : 0.18
@@ -148,7 +155,7 @@ struct cosmo_params{
 
 static struct cosmo_params CP;
 
-void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double Omega_k, double ns, double nH, char *inputPk, int opt){
+void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double Omega_k, double ns, double nH, char *inputPk){
 
   set_cosmology_halo_info(inputPk, Omega_M, Omega_b, wt, H0/100.0, ns);
   CP.H0 = H0;
@@ -158,8 +165,7 @@ void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double
   CP.Omega_k = Omega_k;
   CP.ns = CP.ns;
 
-  set_lambda_table(tarray,rarray,lambda_table,nH,opt); 
-
+  //set_lambda_table(tarray,rarray,lambda_table,nH,1); 
 }
 
 void free_cosmology(){
@@ -187,12 +193,12 @@ void set_Flender_params(double p0, double p1, double p2, double p3, double p4, d
   F.alpha_clump2 =p17;
 }
 
-npy::ndarray return_xx_power(npy::ndarray x_input){
-  int nzbin = 11;
+npy::ndarray return_yy_power(npy::ndarray x_input){
+  int nzbin = 31;
   float zmin = 1e-3;
   float zmax = 3.0;
 	
-  int nmbin = 11;
+  int nmbin = 31;
   float logMvir_min= 12.0;
   float logMvir_max= 16.0;
 
@@ -247,8 +253,8 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
       //cout << zlist[i] << " " << Mlist[j] << endl;
       //flux[i][j] = calc_Flender_xray_flux (cosm_model, z_fft[i], M_fft[j], xlist); //ergs/s/cm^2
 		
-      std::vector<double> emission;
-      emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist); // ergs/s/cm^3/str
+      std::vector<double> pressure;
+      pressure = calc_Flender_pressure_profile(cosm_model, z_fft[i], M_fft[j], xlist); 
       tab_r500[j+nmbin*i] = R500_here;
       
       double yp1 = 1.e31;
@@ -256,7 +262,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 			
       Nspline=0;
       for(int k=0;k<Nx;k++){
-	if(emission[k] > 0){
+	if(pressure[k] > 0){
 	  Nspline += 1;
 	}
       }
@@ -264,9 +270,9 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
       if(Nspline > 2){
 	int id =0;
 	for(int k=0;k<Nx;k++){
-	  if(emission[k] > 0){
+	  if(pressure[k] > 0){
 	    xp[id] = log10(xlist[k]);
-	    yp[id] = log10(emission[k]);
+	    yp[id] = log10(factor*pressure[k]);
 	    id += 1;
 	  }
 	}
@@ -302,7 +308,6 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
   for (int i = 0; i < xshape[0]; ++i) {
     lbin[i] = *reinterpret_cast<double *>(x_input.get_data() + i * xstrides[0]);
   }
-  double Mpc2cm = 3.0856*1e18*1e6;
   double yp1 = 1.e31;
   double ypn = 1.e31;
 
@@ -363,9 +368,9 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 	    double ells = covd/(1+zhere)/r500; // = ell_500
 				
 	    double l_ls = ell_bin/ells;
-												
+										
 	    for(int il=0;il<Nell;il++){
-	        tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * Mpc2cm; // ergs/s/cm^2/str/Mpc
+	        tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * sigma_T/m_elect *  Mpc2cm ; // 1/Mpc
 	    }
 				
 	    double xl;
@@ -388,7 +393,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 	    //double m200m = M_vir_to_M_delta(zhere, Mvir, 200.0);		
 	    double mf = dndlogm_fast(log10(Mvir), zhere);
 	    double b = halo_bias_fast(log10(Mvir), zhere);
-								
+		
 	    cl_xx_1_int_m[jm] = mf * xl * xl;
 	    cl_xx_2_int_m[jm] = mf * b * xl;
 
@@ -396,6 +401,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 	 //   cl_xx_1_int_m[jm] = 0.0;
 	 //   cl_xx_2_int_m[jm] = 0.0;
          //}
+         //fprintf(stdout,"z, mvir, mf, b = %f %e %e %e\n", zhere, Mvir, mf,b);
 
       }
 						
@@ -412,6 +418,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
       cl_xx_1_int_z[iz] = zhere * dVdz * oneh_xx;
       cl_xx_2_int_z[iz] = zhere * dVdz * twoh_xx * twoh_xx * Pk;
       						
+      //fprintf(stdout,"iz= %d %e %e\n", iz,cl_xx_1_int_z[iz], cl_xx_2_int_z[iz] );
    }
 		
     spline(zlist-1, cl_xx_1_int_z-1, nzbin, yp1, ypn, cl_xx_1_int_z2-1);
@@ -422,7 +429,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 
     signal[i] = cl_xx_1 + cl_xx_2;
 
-    //printf("%f %e %e %e\n", ell_bin, cl_xx_1, cl_xx_2, signal[i]);
+    //printf("%f %e %e\n", ell_bin, cl_xx_1, cl_xx_2);
     if(cl_xx_1 != cl_xx_1 || cl_xx_2 != cl_xx_2) signal[i]=0;
     
   }
@@ -440,18 +447,17 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
   return result;
 }
 
-BOOST_PYTHON_MODULE( xx_power ){
+BOOST_PYTHON_MODULE( yy_power ){
   Py_Initialize();
   npy::initialize();
 
   py::def("init_cosmology", init_cosmology);
   py::def("free_cosmology", free_cosmology);
   py::def("set_Flender_params", set_Flender_params);
-  py::def("return_xx_power", return_xx_power);
+  py::def("return_yy_power", return_yy_power);
 }
 
-
-double calc_Flender_xray_flux (cosmo cosm_model, float z, float Mvir, std::vector<float> x){
+std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, float Mvir, std::vector<float> x){
 	
   float conc_norm = F.A_C;
   float conc_mass_norm = 1.0;
@@ -500,7 +506,7 @@ double calc_Flender_xray_flux (cosmo cosm_model, float z, float Mvir, std::vecto
   cosmic_t = cosm_model.cosmic_time(Redshift);
   cosmic_t0 = cosm_model.cosmic_time(0.0);
   E = cosm_model.Efact(Redshift);
-  
+	
   cluster nfwclus(Mvir, Redshift, overden_id, relation, cosm_model);
 	
   //nfwclus.concentration(conc_norm, conc_mass_norm); // set halo concentration using M-c relation of Duffy et al (08)
@@ -513,6 +519,10 @@ double calc_Flender_xray_flux (cosmo cosm_model, float z, float Mvir, std::vecto
   M500 = nfwclus.get_mass_overden(500.0);// Msun
   R500 = nfwclus.get_rad_overden(500.0);// (physical) Mpc
   Rvir = nfwclus.get_radius();
+
+  R500_here = R500 * h; // physical Mpc/h
+  
+  //cout << M500 << " " << R500 << " " << Rvir << endl;
 	
   gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
 	
@@ -527,55 +537,38 @@ double calc_Flender_xray_flux (cosmo cosm_model, float z, float Mvir, std::vecto
   double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
   //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
 	
-  double r, emi, dlum;
-  double luminosity = 0.0;
-  double flux = 0.0;
+  double r, pres;
+  std::vector<double> profile;
 
-  // distances in Mpc
-  //double D_A = cosm_model.ang_diam(Redshift);
-  double D_L = cosm_model.lum_dist(Redshift);
-  D_L *= megapc;
+  // redshift dependence in solid angle
+  double fac = 4.0*M_PI*pow(1.0+Redshift, 4.0); // in steradians
 
   float npoly_mod, gamma_mod;
   gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
   npoly_mod = 1.0/(gamma_mod - 1.0 );
 
-  double dvol[x.size()]; // radial shell vol in cm^3
   for(int xi=0;xi<x.size();xi++){
     r = (double) x[xi]*R500;
-    if ( xi == 0 ) {
-        dvol[xi] = 4.0*M_PI*pow(r*megapc, 3.0);
-    } else {
-        dvol[xi] = 4.0*M_PI*pow(r*megapc, 3.0) - dvol[xi-1];
-    }
-  }
-  for(int xi=0;xi<x.size();xi++){
-    // r in Mpc;
-    r = (double) x[xi]*R500;
-    if(r >= Rmax){
-        emi = 0.0;
-    } else{
-        double ngas,pressure, kT, clump, clump1;
-        pressure = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth); //keV cm^-3
-        ngas = icm_mod.return_ngas_mod(r, R500, x_break, npoly_mod); //cm^-3
-        kT = pressure/ngas; // keV
-    
-        clump1 = icm_mod.return_clumpf(r, R500, clump0, x_clump, alpha_clump1, alpha_clump2) - 1.0;
-        clump1 *= pow(1.+Redshift, clump_zslope);
-        clump = 1.0 + clump1;
-        if (clump < 1.0) clump = 1.0;
-        ngas *= sqrt(clump);
+    if(r >= Rmax){pres = 0.0;}
+    else{
+        /*
+        double ngas,pressure, kT;
+        pressure = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth);
+        ngas = icm_mod.return_ngas_mod(r, R500, x_break, npoly_mod);
+        kT = pressure/ngas;
+        */
 
-        emi = icm_mod.return_xray_emissivity(ngas, kT, Redshift); // ergs/s/cm^3
-        //emi = icm_mod.calc_xray_emissivity(r, R500, Redshift); // ergs/s/cm^3
-        dlum = emi * dvol[xi]; // ergs/s
-    } 
+        pres = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth); //keV cm^-3
     
-    luminosity += dlum;		
+    } 		
+		
+    profile.push_back(pres);
   }
-  flux = luminosity/(4.0*M_PI*D_L*D_L);	//ergs/s/cm^2
-  return flux;	
+	
+  return profile;
+	
 }
+
 
 std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, float z, float Mvir, std::vector<float> x){
 	

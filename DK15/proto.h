@@ -35,27 +35,27 @@ inline double F_Omega(double a);
 inline double Hubble_a(double a);
 double Window(double x);
 
-inline double delta_c_func();
+inline double delta_c_func(double a);
 inline double Press_Schechter(double sigma);
 inline double Sheth_Tormen(double sigma);
 
 inline double efnn(double x, double);
 inline double var4(double x, double);
-inline double efn(double x, double);
-inline double var3(double x, double);
+inline double efn(double x, double rsphere);
+inline double var3(double k, double rsphere);
 inline double ddweight(double x, double);
 inline double dweight(double x, double);
-inline double weight(double x, double);
-double dlogdsigma(double mass, double, double);
+inline double weight(double x, double rsphere);
+double dlogdsigma(double mass, double rsphere, double sigma, double a);
 
-double sigma_m(double m, double *rsphere_return);
-double fract_mass(double sig);
-double sigdsigdr(double);
+double sigma_m(double m, double *rsphere_return, double a);
+double fract_mass(double sig, double a);
+double sigdsigdr(double rsphere);
 double dsig2dr2(double);
-double unnsigma(double);
-inline double evar2(double x, double);
-inline double var2(double x, double);
-double dndlogm(double logm);
+double unnsigma(double rsphere);
+inline double evar2(double x, double rsphere);
+inline double var2(double k, double rsphere);
+double dndlogm(double logm, double a);
 double dndlogm_NG(double logm);
 double dndlogm_MG(double logm);
 
@@ -118,7 +118,7 @@ double U_nfw_fast(double log_ell, double logm, double z);
 */
 
 //2halo term
-double halo_bias(double logm);
+double halo_bias(double logm, double a);
 double halo_bias_shift(double logm);
 double halo_bias_NG(double k, double logm, double z);
 double halo_bias_MG(double logm);

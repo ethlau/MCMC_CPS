@@ -178,12 +178,12 @@ void set_Flender_params(double p0, double p1, double p2, double p3, double p4, d
 }
 
 npy::ndarray return_xy_power(npy::ndarray x_input){
-  int nzbin = 11;
+  int nzbin = 16;
   float zmin = 1e-3;
   float zmax = 2.8;
 	
-  int nmbin = 11;
-  float logMvir_min= 12.0;
+  int nmbin = 16;
+  float logMvir_min= 13.0;
   float logMvir_max= 15.8;
 
   cosmo cosm_model(CP.H0, CP.Omega_M, CP.Omega_b, CP.Omega_k, CP.wt);
@@ -222,21 +222,9 @@ npy::ndarray return_xy_power(npy::ndarray x_input){
   double tab_int[Nx];
   //double flux[nmbin][nzbin];
   
-  double *tab_Fourier_x, *tab_Fourier_y;
-  tab_Fourier_x = (double *) malloc(sizeof(double) * Nx * nzbin * nmbin);
-  if(tab_Fourier_x == NULL){
-    fprintf(stderr, "failed malloc sizeof(double) * %d\n", Nx*nzbin*nmbin);
-    exit(1);
-  }
-  tab_Fourier_y = (double *) malloc(sizeof(double) * Nx * nzbin * nmbin);
-  if(tab_Fourier_y == NULL){
-    fprintf(stderr, "failed malloc sizeof(double) * %d\n", Nx*nzbin*nmbin);
-    exit(1);
-  }
-
-
-  double *tab_r500;
-  tab_r500 = (double *) malloc(sizeof(double) * nzbin * nmbin);
+  double *tab_Fourier_x = new double[ Nx * nzbin * nmbin ];
+  double *tab_Fourier_y = new double[ Nx * nzbin * nmbin ];
+  double *tab_r500 = new double[nzbin * nmbin];
   if(tab_r500 == NULL){
     fprintf(stderr, "failed malloc sizeof(double) * %d\n", nzbin*nmbin);
     exit(1);

@@ -40,24 +40,25 @@ static int WhichSpectrum, np, WhichWindow, OPT, OPT_fit, OPT_HACK, WhichGF, OPT_
 static int OPT_MG, OPT_modified;
 static int OPT_survey;
 
-static double bling, scale_Pk;
+static double scale_Pk;
 
 static double r_tophat,Rsmooth,Delta_c,fdelta_c,Const_MF,st_norm;
 
 static double AA,BB,CC;
 static double B1,B2,B3,B4,B5;
-static double nu,sigma, Omega_z;
+static double nnu;
 
 static double UnitTime_in_s, UnitLength_in_cm, UnitMass_in_g, UnitVelocity_in_cm_per_s;
 static double G, Hubble;
 
-static double Norm, InitTime, calc_z, a_exp;
-static double Dplus; /* growth factor */
+static double Norm;
+//static double Norm, InitTime, calc_z; //a_exp
+//static double Dplus; /* growth factor */
 
 struct get_mvir{
-	double delta;
-	double rd;
-	double redshift;
+    double delta;
+    double rd;
+    double redshift;
 };
 
 void set_cosmology_halo_info(char *inputPk, double Omega_m, double Omega_b, double w0, double h0, double ns_index){
@@ -76,7 +77,8 @@ void set_cosmology_halo_info(char *inputPk, double Omega_m, double Omega_b, doub
   Omega = Omega_m;
   OmegaLambda = 1.-Omega;
   OmegaBaryon = Omega_b;
-	
+
+  fprintf(stdout, "Om = %4.3f, OL = %4.3f, w0 = %4.3f, h0 = %4.3f\n", Omega, OmegaLambda, w, HubbleParam);	
   growth_spline();
 	
   int i;
@@ -102,9 +104,8 @@ void free_halo_info(){
 //==================================================
 int initialize_powerspectrum(int Spectrum)
 {
-  double res;
+  double res;	
   int i;
-	
   for(i=0;i<1000;i++)
     xp[i]=yp[i]=yp2[i]=0;
 	
@@ -113,12 +114,12 @@ int initialize_powerspectrum(int Spectrum)
     readCMB_and_do_spline();
   }
 	
-  a_exp=1/(1+calc_z);
+  //a_exp=1/(1+calc_z);
 	
   AA=6.4/Gamma; 
   BB=3.0/Gamma; 
   CC=1.7/Gamma;  
-  nu=1.13;
+  nnu=1.13;
 	
 	
   B1=2.34/Gamma; 
@@ -131,9 +132,9 @@ int initialize_powerspectrum(int Spectrum)
   Norm = 1.0;
   Sigma8 = sqrt(TopHatSigma2(8.));
   //Norm=Sigma8*Sigma8/res;
-  //fprintf(stdout,"Sigma8 = %g \n",Sigma8);
+  fprintf(stdout,"Sigma8 = %g \n",Sigma8);
 	
-  Dplus= GrowthFactor(a_exp, 1.0);
+  //Dplus= GrowthFactor(a_exp, 1.0);
 	
   return i;
 }
@@ -186,7 +187,7 @@ double PowerSpec(double kmag)
 //==================================================
 inline double PowerSpec_Efstathiou(double k)
 {
-	return Norm*pow(k,ns) / pow(1+pow(AA*k+pow(BB*k,1.5)+CC*CC*k*k,nu),2/nu);
+	return Norm*pow(k,ns) / pow(1+pow(AA*k+pow(BB*k,1.5)+CC*CC*k*k,nnu),2/nnu);
 }
 
 
@@ -288,7 +289,7 @@ void readCMB_and_do_spline()
 	
 	sprintf(tfunc_table,"%s",TransTable);
 	
-	//fprintf(stdout,"Reading %s .\n",tfunc_table);
+	fprintf(stdout,"Reading %s .\n",tfunc_table);
 	iline=0;
 	double dummy1,dummy2,dummy3,dummy4,dummy5;
 	if(fd=fopen(tfunc_table,"r")){
@@ -304,7 +305,7 @@ void readCMB_and_do_spline()
 		errorFlag=1;
 	}
 	
-	//fprintf(stdout,"read in %d data points \n",iline);
+	fprintf(stdout,"read in %d data points \n",iline);
 	
 	np=iline;
 	
@@ -406,73 +407,9 @@ double growth(double a)
 
 inline double growth_int(double a)
 {
-	return pow(a / (Omega + (1-Omega-OmegaLambda)*a + OmegaLambda*a*a*a), 1.5);
+    return pow(a / (Omega + (1-Omega-OmegaLambda)*a + OmegaLambda*a*a*a), 1.5);
 }
 
-
-inline double var2(double x, double rsphere)
-{
-	double res,pspec,xk;
-	res=weight(x, rsphere)*PowerSpec(x)*bling*bling;
-	
-	return res;
-}
-
-inline double evar2(double x, double rsphere)
-{
-	double rk,res;
-	
-	rk = exp(x);
-	res = var2(rk, rsphere)*rk;
-	
-	return res;
-}
-
-inline double weight(double x, double rsphere) 
-{
-	// Tophat filter * k^2
-	// there appears to be appreciable differences between C-version and fortran
-	double y,res,yinv,yinv2;
-	
-	y=rsphere*x;
-	yinv=1.0/y;
-	yinv2=yinv*yinv;
-	
-	res=36.0*M_PI*x*x* pow((sin(y)/y-cos(y))*yinv2, 2)/pow(2*PI,3);
-	
-	if(sin(y)/y - cos(y) < TINY)
-	res=0;
-	
-	return res;
-}
-
-double sigma_m(double m, double *rsphere_return)
-{
-	//   Use unit of mass where 1h^{-1}Mpc^3 has mass 1
-	
-	double res,rsphere,ling,aend;
-	
-	rsphere = pow((3.*m/4./M_PI), 0.33333333333);
-	*rsphere_return = rsphere;
-	
-	res = sqrt(unnsigma(rsphere));
-	
-	return res;
-}
-
-double unnsigma(double rsphere)
-{
-	int i,j,k;
-	double dxk=0.01,xk;
-	double sum=0;
-	
-	for(i=0;i<=4000;i++){
-		xk=-20.0 + dxk*i;
-		sum += evar2(xk, rsphere)*dxk;
-	}
-	
-	return sum;
-}
 
 double delta_v(double z){
 	double Omz = (Omega*pow(1.0+z,3.0))/(Omega*pow(1.0+z,3.0)+OmegaLambda);
@@ -484,43 +421,6 @@ double r_vir(double z,double M){
 	rho_crit=2.7754e11*(Omega*pow(1.0+z,3.0) + OmegaLambda);
 	logr=(log10(3*M)-log10(4.0*PI*rho_crit*delta_v(z)))/3.0;
 	return pow(10.0,logr);
-}
-
-double RungeKutta(double a_in,double a){
-	// u=D/a ,initial condition---> du/dlna=0,u=1
-	int i,j;
-	double h=(log(a)-log(a_in))/10000;
-	double x=log(a_in);
-	double u=1;
-	double dudlna=0;
-	double k0[2],k1[2],k2[2],k3[2];
-	
-	if(a_in==0){
-		printf("you cannot solve calculate linear density growth eq.");
-	}if(a == a_in){
-		u=1;
-	}else{
-		for(i=0;i<10000;i++){
-			
-			k0[0]=h*dudlna;
-			k0[1]=h*(-coeff1(exp(x))*dudlna-coeff2(exp(x))*(u));
-			
-			k1[0]=h*(dudlna+k0[1]/2);
-			k1[1]=h*(-coeff1(exp(x+h/2))*(dudlna+k0[1]/2)-coeff2(exp(x+h/2))*(u+k0[0]/2));
-			
-			k2[0]=h*(dudlna+k1[1]/2);
-			k2[1]=h*(-coeff1(exp(x+h/2))*(dudlna+k1[1]/2)-coeff2(exp(x+h/2))*(u+k1[0]/2));
-			
-			k3[0]=h*(dudlna+k2[1]);
-			k3[1]=h*(-coeff1(exp(x+h))*(dudlna+k2[1])-coeff2(exp(x+h))*(u+k2[0]));
-			
-			u = u + (k0[0]+2*k1[0]+2*k2[0]+k3[0])/6;
-			dudlna = dudlna + (k0[1]+2*k1[1]+2*k2[1]+k3[1])/6;
-			x = x+h;
-		}
-	}
-	
-	return a*u;
 }
 
 void growth_spline(){
@@ -588,13 +488,14 @@ void stack_table_and_spline(){
   err_cv=dmatrix(1,NPOINTS,1,NPOINTS);
 	
   for(i=0;i<NPOINTS;i++){
-    a_exp=1.0/(1.0+pow(10,tab_z[i])); // expansion parameter at which MF is computed
-    calc_z=1.0/a_exp -1.0;
+    //a_exp=1.0/(1.0+pow(10,tab_z[i])); // expansion parameter at which MF is computed
+    //calc_z=1.0/a_exp -1.0;
+
+    double calc_z = pow(10.0, tab_z[i]);
 		
     Delta_c=1.68647;
 		
-    Omega_z = Omega*pow(1.0+calc_z,3.0)/(Omega*pow(1.0+calc_z,3.0) + OmegaLambda);
-    bling = growth(a_exp)/growth(1.);
+    //Omega_z = Omega*pow(1.0+calc_z,3.0)/(Omega*pow(1.0+calc_z,3.0) + OmegaLambda);
 		
     for(j=0;j<NPOINTS;j++){
       tab_m[j] = j*dlogm + 10.;
@@ -636,16 +537,16 @@ void stack_table_and_spline(){
 	
   for(i=0;i<NPOINTS;i++){
 
-    a_exp=1.0/(1.0+pow(10,tab_z[i])); // expansion parameter at which MF is computed
-    calc_z=1.0/a_exp -1.0;
+    double aexp=1.0/(1.0+pow(10,tab_z[i])); // expansion parameter at which MF is computed
+    double calc_z=1.0/aexp -1.0;
 		
     Delta_c=1.68647;
 		
-    Omega_z = Omega*pow(1.0+calc_z,3.0)/(Omega*pow(1.0+calc_z,3.0) + OmegaLambda);
-    bling = growth(a_exp)/growth(1.);
+    //Omega_z = Omega*pow(1.0+calc_z,3.0)/(Omega*pow(1.0+calc_z,3.0) + OmegaLambda);
 		
     for(j=0;j<NPOINTS;j++){
       double mvir = pow(10., tab_m[j]);
+     
       double m200 = M_vir_to_M_delta(calc_z, mvir, 200);
 
       double mvir_u = pow(10., tab_m[j]+0.01);
@@ -655,16 +556,13 @@ void stack_table_and_spline(){
       double m200_d = M_vir_to_M_delta(calc_z, mvir_d, 200);
 
       double fac = log10(m200_u/m200_d)/log10(mvir_u/mvir_d); // dlogM200m/dlogMvir
-	    
-      tab_mf[i+1][j+1] = dndlogm(log10(m200)) * fac; 
-      tab_bh[i+1][j+1] = halo_bias(tab_m[j]); // tab_m is now defined by virial mass!
-      
-      /*if(tab_mf[i+1][j+1] < 1e-100){
-	printf("z=%e M=%e dn/dlogM= %e bias= %e\n",pow(10,tab_z[i]),pow(10,tab_m[j]),tab_mf[i+1][j+1],tab_bh[i+1][j+1]);
-	}*/
+          
+      tab_mf[i+1][j+1] = dndlogm(log10(m200), aexp) * fac; 
+      tab_bh[i+1][j+1] = halo_bias(tab_m[j], aexp); // tab_m is now defined by virial mass!
+      //if(tab_mf[i+1][j+1] < 1e-100){
+      //printf("z=%e M=%e dn/dlogM= %e bias= %e\n",pow(10,tab_z[i]),pow(10,tab_m[j]),tab_mf[i+1][j+1],tab_bh[i+1][j+1]);
     }
   }
-  //exit(1);
 	
   for(i=1;i<=NPOINTS;i++){
     for(j=1;j<=NPOINTS;j++){
@@ -674,7 +572,7 @@ void stack_table_and_spline(){
   }		
   splie2(tab_z-1, tab_m-1, tab_mf,NPOINTS,NPOINTS, err_mf);
   splie2(tab_z-1, tab_m-1, tab_bh,NPOINTS,NPOINTS, err_bh);
-  //printf("set spline dn/dlogm...\n");
+  ///printf("set spline dn/dlogm...\n");
 	
 }
 
@@ -713,7 +611,8 @@ double nu_M(double z, double M){
 	
 	double rho_crit=2.7754e11;
 	double r, rmass = M/rho_crit/Omega;
-	double sig = sigma_m(rmass, &r);
+        double a = 1.0/(1.0+z);
+	double sig = sigma_m(rmass, &r, a);
 	
 	return 1.686/sig;
 }
@@ -835,96 +734,160 @@ double M_vir_to_M_200c(double z, double mvir){
 
 // halo mass function
 
-inline double delta_c_func()
+inline double evar2(double x, double rsphere)
+{
+    double k,res;
+	
+    // x in lnk
+    k = exp(x);
+    res = var2(k, rsphere)*k;
+	
+    return res;
+}
+
+inline double var2(double k, double rsphere)
+{
+    double res,pspec;
+	
+    // k^2 W(kR)^2 * P(k)
+    res = weight(k, rsphere) * PowerSpec(k);
+	
+    return res;
+}
+
+
+inline double weight(double k, double rsphere) 
+{
+    // Tophat filter^2 * k^2
+    // there appears to be appreciable differences between C-version and fortran
+    double y,res,yinv,yinv2,yinv3;
+	
+    y=rsphere*k;
+    yinv=1.0/y;
+    yinv2=yinv*yinv;
+	
+    res=36.0*k*k*M_PI*pow((sin(y)/y-cos(y))*yinv2, 2);
+
+    res /= pow(2*PI, 3);
+	
+    if(sin(y)/y - cos(y) < TINY)
+    res=0;
+
+    
+    /*
+    // W(kR)
+    y = k * rsphere;
+    yinv = 1.0 / y;
+    yinv3 = yinv*yinv*yinv;
+    res = 3.0*(sin(y) - y*cos(y))*yinv3;
+    res =* res;
+
+    if(sin(y)/y - cos(y) < TINY) res=0;
+
+    */
+
+    return res;
+}
+
+double sigma_m(double m, double *rsphere_return, double a) //sigma(M)
+{
+
+    //   Use unit of mass where 1h^{-1}Mpc^3 has mass 1	
+    double res, rsphere, ling;
+ 
+    rsphere = pow((3.*m/4./M_PI), 0.33333333333);
+    *rsphere_return = rsphere;
+    res = sqrt(unnsigma(rsphere)); //sigma(R,z=0)
+    
+    ling = growth(a)/growth(1.0);
+    res = res * ling;
+
+    return res;
+}
+
+double unnsigma(double rsphere) // sigma^2(R,z=0) = \int d^3k P(k) |W(k;R)|^2
+{
+	int i,j,k;
+	double dxk=0.01,xk;
+	double sum=0;
+	
+	for(i=0;i<=4000;i++){
+            // dxk, xk in lnk
+	    xk=-20.0 + dxk*i;
+	    sum += evar2(xk, rsphere)*dxk;
+	}
+	return sum;
+}
+
+inline double delta_c_func(double a)
 { 
-	double res;
-	res = 3.0*pow(12*PI,0.666666666)*(1.0+0.00123*log10(Omega_z))/20.0;
+	double res, omega_z;
+        
+        omega_z = Omega*pow(a,-3.0)/(Omega*pow(a,-3.0) + OmegaLambda);
+	res = 3.0*pow(12*PI,0.666666666)*(1.0+0.00123*log10(omega_z))/20.0;
+
 	return res;
 }
 
 inline double efn(double x, double rsphere)
 {
-	double rk,res;
-	
-	rk=exp(x);
-	res=rk*var3(rk, rsphere);
-	
+	double k,res;
+	// x in lnk
+	k=exp(x);
+	res=k*var3(k, rsphere);	
 	return res;
 }
 
-inline double var3(double x, double rsphere)
+inline double var3(double k, double rsphere)
 {
-	double rk,res,pspec,xk;
+	double res;
 	
 	//xk=x/1000.0; // kpc -> Mpc scaling 
 	//res=dweight(x, rsphere)*PowerSpec(xk) * (1000.0/Norm);
 	
-	res=dweight(x, rsphere)*PowerSpec(x) * bling * bling;
-	
+	//res = dweight(k, rsphere)*PowerSpec(k)/(k*k);
+	res = dweight(k, rsphere)*PowerSpec(k);
+
 	return res;
 }
 
-inline double dweight(double x, double rsphere)  // derivative of weight with rsphere
+inline double dweight(double k, double rsphere)  // derivative of weight with rsphere dW^2/dM
 {
+        
 	double y,yinv,yinv2,yinv3,yinv4,res;
 	
-	y=rsphere*x;
+	y=rsphere*k;
 	yinv=1.0/y;
 	yinv2=yinv*yinv;
 	yinv3=yinv*yinv2;
 	yinv4=yinv*yinv3;
 	
 	
-	res=M_PI*x*x*x*72.0*(3.0*cos(y)*yinv3 - 3.0*sin(y)*yinv4+sin(y)*yinv2)
+	res=M_PI*k*k*k*72.0*(3.0*cos(y)*yinv3 - 3.0*sin(y)*yinv4+sin(y)*yinv2)
 			*(sin(y)*yinv3-cos(y)*yinv2);
 	
-	return res/pow(2*PI, 3);
+	res = res/pow(2*PI, 3);
+        
+        /*
+        double y,yinv,yinv2,yinv3,yinv4,res;
+	
+	y=rsphere*k;
+	yinv=1.0/y;
+	yinv2=yinv*yinv;
+	yinv3=yinv*yinv2;
+	yinv4=yinv*yinv3;
+	
+        y = rsphere * k;
+        
+        res = sin(y)-y*cos(y);
+        res *= ( sin(y)*(1.0-3.0*yinv2) + 3.0 * cos(y)*yinv);
+        */
+    
+        return res;
+        
 }
 
-
-double dndlogm(double logm)
-{
-  // Number density per interval in log_{10} in mass
-	
-  double rho_crit=2.7754e11;
-  double delta=1.68647;
-  double result,rm,rmass,sig,ans,fract;
-  double r, res;
-		
-  rm = pow(10,logm);
-  rmass = rm/rho_crit/Omega;
-	
-  sig = sigma_m(rmass, &r);
-  ans = dlogdsigma(rmass, r, sig);
-	
-  fract = fract_mass(sig);
-  if(OPT == 4){
-    double nu=delta_c_func()/sig;
-    double neff=-6*ans-3;
-		
-    fract=fract*exp(-0.03/pow(neff+3,2)/pow(nu,0.6));
-  }
-	
-  res = Rlog_e10*(rho_crit*Omega/rm*fabs(ans)*fract);
-		
-  //cout<<"rm="<<rm<<" ans="<<ans<<" sig="<<sig<<" fract="<<fract<<endl;
-		
-  return res;
-}
-
-double dlogdsigma(double mass, double rsphere, double sigma) //dlog(sigma)/dlogM
-{
-	double rho_crit=2.7754e11;
-	double usig,ling,res,aend;
-	
-	res=sigdsigdr(rsphere);
-	
-	res= res * (mass/sigma/sigma)/4.0/M_PI/rsphere/rsphere;
-	
-	return res;
-}
-
-double sigdsigdr(double rsphere) //d(sigma^2)/dr
+double sigdsigdr(double rsphere) //d(sigma^2)/dr = 0.5 sigma dsigma/dr
 {
   int i;
   double dxk=0.005,xk;
@@ -934,20 +897,66 @@ double sigdsigdr(double rsphere) //d(sigma^2)/dr
     xk=-20.0 + dxk*i;
     sum += efn(xk, rsphere)*dxk;
   }
-	
-  res = 0.5*sum;
+  res = sum/2.0;
   return res;
 }
 
-double  fract_mass(double sig)  //  f(\ln\sigma^{-1})
+double dndlogm(double logm, double a)
+{
+  // Number density per interval in log_{10} in mass
+  double rho_crit=2.7754e11;
+  double delta=1.68647;
+  double result,rm,rmass,sig,ans,fract;
+  double r, res;
+		
+  rm = pow(10,logm);
+  rmass = rm/rho_crit/Omega;
+	
+  sig = sigma_m(rmass, &r, a);
+  ans = dlogdsigma(rmass, r, sig, a);
+	
+  fract = fract_mass(sig,a);
+  //printf("m, sig, dlnsdlnm, fsig = %e %e %e %e\n", rm, sig, ans, fract);
+ 
+  if(OPT == 4){
+    double nu=delta_c_func(a)/sig;
+    double neff=-6*ans-3;
+		
+    fract=fract*exp(-0.03/pow(neff+3,2)/pow(nu,0.6));
+  }
+  
+  res = Rlog_e10*(rho_crit*Omega/rm*fabs(ans)*fract);
+
+  //cout<<"rm="<<rm<<" ans="<<ans<<" sig="<<sig<<" fract="<<fract<<endl;
+
+  return res;
+}
+
+
+double dlogdsigma(double mass, double rsphere, double sigma, double a) //dlog(sigma)/dlogM
+{
+        
+	double rho_crit=2.7754e11;
+	double usig,ling,res,aend;
+	
+	res=sigdsigdr(rsphere);	
+        ling = growth(a)/growth(1.0);
+	res= res * ling*ling* (mass/sigma/sigma)/4.0/M_PI/rsphere/rsphere;
+
+	return res;
+}
+
+double fract_mass(double sig, double a)  //  f(\ln\sigma^{-1})
 {
   double delta=1.68647;
   double sqrt_two_over_pi=0.79788456;
   double sqrt_two=1.414213562;
   double nu_prime,s,fract,fdeltac;
   int iselect, ivalid;
+
+  double calc_z = 1.0/a - 1.0;
 	
-  fdeltac=delta_c_func();
+  fdeltac=delta_c_func(a);
 	
   double Nu = fdeltac/sig;
 	
@@ -1035,9 +1044,10 @@ double  fract_mass(double sig)  //  f(\ln\sigma^{-1})
       b = 2.57;
       c = 1.19;
       double alpha = pow(10.,-pow(0.75/(log10(200.0/75.)),1.2));
-      A = A * pow(1.0+calc_z, 3.0);
+      A = A * pow(1.0+calc_z, -0.14);
       a = a * pow(1.0+calc_z, -0.06);
       b = b * pow(1.0+calc_z, -alpha);
+
       /*
       double rho_c=2.7754e11*(Omega*pow(1.0+calc_z,3.0) + OmegaLambda);
       double rho_m=2.7754e11*(Omega*pow(1.0+calc_z,3.0));
@@ -1172,7 +1182,7 @@ double M_vir_to_M_delta(double z, double mvir, double delta){
   return mdelta;
 }
 
-double halo_bias(double logm){ //based on peak-background split
+double halo_bias(double logm, double a){ //based on peak-background split
   double delta=1.68647;
   double sqrt_two_over_pi=0.79788456;
   double sqrt_two=1.414213562;
@@ -1180,13 +1190,15 @@ double halo_bias(double logm){ //based on peak-background split
   double rho_crit=2.7754e11;
   double rm,rmass,sig,ans,fract;
   double r, res;
+
+  double calc_z = 1.0/a - 1.0;
 	
-  fdeltac=delta_c_func();
+  fdeltac=delta_c_func(a);
 	
   rm = pow(10,logm);
   rmass = rm/rho_crit/Omega;
 	
-  sig = sigma_m(rmass, &r);
+  sig = sigma_m(rmass, &r, a);
 	
   double Nu = fdeltac/sig;
 	
@@ -1300,3 +1312,42 @@ double halo_bias_fast(double logm, double z){
   if( pow_index != pow_index )printf("fail to spline at m=%e z=%e [halo_bias]\n",pow(10.,logm),z);
   return pow(10.0,pow_index);
 }
+
+double RungeKutta(double a_in,double a){
+	// u=D/a ,initial condition---> du/dlna=0,u=1
+	int i,j;
+	double h=(log(a)-log(a_in))/10000;
+	double x=log(a_in);
+	double u=1;
+	double dudlna=0;
+	double k0[2],k1[2],k2[2],k3[2];
+	
+	if(a_in==0){
+		printf("you cannot solve calculate linear density growth eq.");
+	}if(a == a_in){
+		u=1;
+	}else{
+		for(i=0;i<10000;i++){
+			
+			k0[0]=h*dudlna;
+			k0[1]=h*(-coeff1(exp(x))*dudlna-coeff2(exp(x))*(u));
+			
+			k1[0]=h*(dudlna+k0[1]/2);
+			k1[1]=h*(-coeff1(exp(x+h/2))*(dudlna+k0[1]/2)-coeff2(exp(x+h/2))*(u+k0[0]/2));
+			
+			k2[0]=h*(dudlna+k1[1]/2);
+			k2[1]=h*(-coeff1(exp(x+h/2))*(dudlna+k1[1]/2)-coeff2(exp(x+h/2))*(u+k1[0]/2));
+			
+			k3[0]=h*(dudlna+k2[1]);
+			k3[1]=h*(-coeff1(exp(x+h))*(dudlna+k2[1])-coeff2(exp(x+h))*(u+k2[0]));
+			
+			u = u + (k0[0]+2*k1[0]+2*k2[0]+k3[0])/6;
+			dudlna = dudlna + (k0[1]+2*k1[1]+2*k2[1]+k3[1])/6;
+			x = x+h;
+		}
+	}
+	
+	return a*u;
+}
+
+
