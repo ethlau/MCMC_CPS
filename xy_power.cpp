@@ -139,7 +139,7 @@ struct cosmo_params{
 
 static struct cosmo_params CP;
 
-void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double Omega_k, double ns, double nH, char *inputPk){
+void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double Omega_k, double ns, double nH, char *inputPk, int opt){
 
   set_cosmology_halo_info(inputPk, Omega_M, Omega_b, wt, H0/100.0, ns);
   CP.H0 = H0;
@@ -149,7 +149,7 @@ void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double
   CP.Omega_k = Omega_k;
   CP.ns = CP.ns;
 
-  set_lambda_table(tarray,rarray,lambda_table,nH,1); 
+  set_lambda_table(tarray,rarray,lambda_table,nH,opt); 
 }
 
 void free_cosmology(){
@@ -628,7 +628,8 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, float
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
 	
-  double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  //double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  double Rmax = 3.0*R500;
   //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
 	
 
@@ -757,7 +758,8 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, flo
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
 	
-  double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  //double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  double Rmax = 3.0*R500;
   //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
 	
   double r, P;

@@ -5,7 +5,7 @@ import math
 import os, sys, time, logging
 import numpy as np
 import pandas as pd
-import xx_power
+import xy_power
 import emcee
 import datetime
 from schwimmbad import MPIPool
@@ -22,7 +22,7 @@ size = comm.Get_size()
 
 if rank == 0 :
     now = datetime.datetime.now()
-    dirname = "../halo_model_Flender/MCMC/test/{0:%Y-%m-%d}".format(now)
+    dirname = "../halo_model_Flender/MCMC_xy/test/{0:%Y-%m-%d}".format(now)
     if os.path.exists(dirname) == False:
         os.mkdir(dirname)
     else:
@@ -48,11 +48,10 @@ else :
 dirname = comm.bcast(dirname, root=0)
 
 # setup logger
-filename_log = "mcmc_log"
-logging.basicConfig(filename=os.path.join(dirname, filename_log), level=logging.DEBUG)
+#filename_log = "mcmc_log"
+#logging.basicConfig(filename=os.path.join(dirname, filename_log), level=logging.DEBUG)
 
 # set cosmology and linear power spectrum
-'''
 H0=70.000000
 Omega_M=0.279000
 Omega_b=0.046100
@@ -60,28 +59,8 @@ w0=-1.000000
 Omega_k=0.000000
 n_s=0.972000
 inputPk="../input_pk/wmap9_fid_matterpower_z0.dat"
-nH = 2.45e21
-'''
-H0=67.32117
-Omega_M=0.3158
-Omega_b=0.0490
-w0=-1.000000
-Omega_k=0.000000
-n_s=0.96605
-inputPk="../input_pk/planck_2018_test_matterpower.dat"
-nH = 2.45e21
-opt = 1
-
-xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk, opt)
-
-def beam (ell, fwhm=12.0) :
-
-    #convert fwhm from arcmin to radian
-    fwhm = math.radians(fwhm/60.0)
-    sigma = fwhm / (np.sqrt(8.0*np.log(2.0)))
-    bl = np.exp(ell*(ell+1.0) * sigma**2)
-
-    return bl
+nH = 2.45e20
+xy_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk)
 
 def lnlike(theta, x, y, invcov):
     '''
@@ -103,10 +82,10 @@ def lnlike(theta, x, y, invcov):
     #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
 
     #eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
-    eps_f, eps_DM, f_star, S_star, clump0 = theta
+    eps_f, f_star, S_star, clump0, log_noise  = theta
 
     #fix DM profile
-    #eps_DM = 0.006
+    eps_DM = 0.006
     A_C = 1.0
 
     #fix non-thermal pressure term
@@ -127,25 +106,24 @@ def lnlike(theta, x, y, invcov):
     alpha_clump1 = 0.88
     alpha_clump2 = 3.85
 
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2 )
+    xy_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2 )
 
-    model = xx_power.return_xx_power_alt(x) # [erg cm^-2 s^-1 str^-1]^2
-    #sn = np.full(x.shape, 10.0**log_noise, dtype = np.float64)
-    #model += sn
-    #model /= beam(x)
+    model = xy_power.return_xy_power(x) # [erg cm^-2 s^-1 str^-1]^2
+    sn = np.full(x.shape, 10.0**log_noise, dtype = np.float64)
+    model += sn
 
     diff = np.array(y-model, dtype=np.float64)
     lnl = -0.5*np.dot(diff, np.dot(invcov, np.transpose(diff)))
     return lnl
 
 def lnprior(theta):
-
-    eps_f, eps_DM, f_star, S_star, clump0 = theta
+    #eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
+    eps_f, f_star, S_star, clump0, log_noise = theta
 
     # see https://arxiv.org/pdf/1610.08029.pdf
     #if 0.1 <= eps_f <= 10.0 and 0.0 <= eps_DM <= 0.10 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.1 <= A_C <= 3.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 :
     #if 0.1 <= eps_f <= 10.0 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 and 0.0 <= clump0 <= 2.0 and -1.0 <= clump_zslope <= 1.0 :
-    if 0.1 <= eps_f <= 10.0 and 0.01 <= f_star <= 0.05 and 0.01 <= S_star <= 1.0 and 0.0 <= clump0 <= 2.0 and 0.0 <= eps_DM <= 0.10 : 
+    if 0.05 <= eps_f <= 15.0 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.0 <= clump0 <= 2.0 and -23.0 <= log_noise <= -17.0 : 
         return 0.0
     else:
         return -np.inf
@@ -178,9 +156,8 @@ def read_data (filename) :
     return ell, cl, var
 
 if rank == 0 :
-    filename = '../ROSAT/rosat_R4_R7.txt'
-    ell,cl,var = read_data(filename)
 
+    ell,cl,var = read_data('../ROSAT/rosat_R6_planck_mask_hfi_R2_small_ell.txt')
     icov = np.zeros((var.size,var.size))
     for i in range(var.size) :
         icov[i,i] = 1.0/var[i]
@@ -203,9 +180,7 @@ def lnprob_global(theta):
     return lp + ll, lp
 
 #initial paramaters for MCMC
-#eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope, log_noise
-pinit  = np.array([4.0, 0.1, 0.045, 0.12, 0.67])
-
+pinit  = np.array([10.0,0.026000,0.120000,0.67,-20.5])
 ndim = pinit.size
 
 # chain will be saved every nstep. In total nbunch * nstep samplings.
@@ -239,6 +214,7 @@ with MPIPool() as pool:
     old_tau = np.inf
 
     start = time.time()
+
     for sample in sampler.sample(pos, iterations=nstep, progress=True):
         # Only check convergence every 100 steps
         if sampler.iteration % 100:

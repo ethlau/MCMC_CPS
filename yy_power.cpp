@@ -24,17 +24,16 @@
 #define MAXBINS 500
 
 double tarray[ntmax]; //keV
-double zarray[nzmax]; //Solar unit
+double zarray[nmmax]; //Solar unit
 double rarray[nrmax]; 
 double lambda_table[ntmax][nrmax];
 double tres, zres, eres;
 
 const double sigma_T = 0.665245854e-24; //(cm)^2 Thomson cross-section
-const double m_elect = 0.510998902e3; //keV/c^2
-const double Mpc2cm = 3.0856*1e18*1e6;
+const double m_elect = 5.10998902e2; //keV/c^2
+const double megapc = 3.0856*1e18*1e6;
 const double X = 0.76;// primordial hydrogen fraction
 const double factor = (2.0*X+2.0)/(5.0*X+3.0);//conversion factor from gas pressure to electron pressure
-
 
 using namespace std;
 
@@ -84,7 +83,7 @@ struct Flender_param{
 
 static struct Flender_param F;
 
-double calc_Flender_xray_flux (cosmo cosm_model, float z, float Mvir, std::vector<float> x);
+double calc_Flender_Ysz (cosmo cosm_model, float z, float Mvir, std::vector<float> x);
 
 void free_FFTdata();
 void FFT_density_profile(double *output, double *bin, int nbin);
@@ -194,11 +193,11 @@ void set_Flender_params(double p0, double p1, double p2, double p3, double p4, d
 }
 
 npy::ndarray return_yy_power(npy::ndarray x_input){
-  int nzbin = 31;
+  int nzbin = 11;
   float zmin = 1e-3;
   float zmax = 3.0;
 	
-  int nmbin = 31;
+  int nmbin = 11;
   float logMvir_min= 12.0;
   float logMvir_max= 16.0;
 
@@ -255,7 +254,7 @@ npy::ndarray return_yy_power(npy::ndarray x_input){
 		
       std::vector<double> pressure;
       pressure = calc_Flender_pressure_profile(cosm_model, z_fft[i], M_fft[j], xlist); 
-      tab_r500[j+nmbin*i] = R500_here;
+      tab_r500[j+nmbin*i] = R500_here; // in Mpc;
       
       double yp1 = 1.e31;
       double ypn = 1.e31;
@@ -362,7 +361,7 @@ npy::ndarray return_yy_power(npy::ndarray x_input){
          //if ( flux[iz][jm] >= 0.0 ) {	
 	    double logMvir = dlogm*(double)(1.*jm) + logMvir_min;
 	    mlist[jm] = logMvir;
-	    double Mvir = pow(10., logMvir) * CP.H0/100; // in the unit of Msun/h
+	    double Mvir = pow(10., logMvir); // in the unit of Msun/
 	    double r500 = tab_r500[jm+nmbin*iz];
 				
 	    double ells = covd/(1+zhere)/r500; // = ell_500
@@ -370,10 +369,10 @@ npy::ndarray return_yy_power(npy::ndarray x_input){
 	    double l_ls = ell_bin/ells;
 										
 	    for(int il=0;il<Nell;il++){
-	        tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * sigma_T/m_elect *  Mpc2cm ; // 1/Mpc
+	        tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)] * sigma_T/m_elect *  megapc ; // 1/Mpc
 	    }
 				
-	    double xl;
+	    double yl;
 	    int index;
 				
 	    index = -1;
@@ -384,18 +383,18 @@ npy::ndarray return_yy_power(npy::ndarray x_input){
 	    }
 				
 	    if(index < 0){
-	        xl = 0;
+	        yl = 0;
 	    } else {
-	        xl = (tab_fc_int[index+1]-tab_fc_int[index])/(tab_l_ls[index+1]-tab_l_ls[index])*(log10(l_ls)-tab_l_ls[index]) + tab_fc_int[index];
-	        xl = xl * 4*M_PI*(r500/CP.H0*100.0)/ells/ells; // ergs/s/cm^2/str
+	        yl = (tab_fc_int[index+1]-tab_fc_int[index])/(tab_l_ls[index+1]-tab_l_ls[index])*(log10(l_ls)-tab_l_ls[index]) + tab_fc_int[index];
+	        yl = yl * 4*M_PI*(r500)/ells/ells; // 
 	    }
 
 	    //double m200m = M_vir_to_M_delta(zhere, Mvir, 200.0);		
 	    double mf = dndlogm_fast(log10(Mvir), zhere);
 	    double b = halo_bias_fast(log10(Mvir), zhere);
 		
-	    cl_xx_1_int_m[jm] = mf * xl * xl;
-	    cl_xx_2_int_m[jm] = mf * b * xl;
+	    cl_xx_1_int_m[jm] = mf * yl * yl;
+	    cl_xx_2_int_m[jm] = mf * b * yl;
 
          //} else {
 	 //   cl_xx_1_int_m[jm] = 0.0;
@@ -447,6 +446,72 @@ npy::ndarray return_yy_power(npy::ndarray x_input){
   return result;
 }
 
+npy::ndarray return_pressure_profile(npy::ndarray x_input, double z, double Mvir){
+
+  cosmo cosm_model(CP.H0, CP.Omega_M, CP.Omega_b, CP.Omega_k, CP.wt);
+
+  cout << "computing pressure profile" << endl;
+
+  int nd = x_input.get_nd();
+  if (nd != 1)
+    throw std::runtime_error("a must be 1-dimensional");
+  size_t nsh = x_input.shape(0);
+  if (x_input.get_dtype() != npy::dtype::get_builtin<double>())
+    throw std::runtime_error("a must be float64 array");
+
+  auto xshape = x_input.get_shape();
+  auto xstrides = x_input.get_strides(); 
+  //int Nbin=xshape[0];
+  int Nbin = x_input.shape(0);
+  /*
+  double* input_ptr = reinterpret_cast<double*>(input.get_data());
+  std::vector<double> v(input_size);
+  for (int i = 0; i < input_size; ++i)
+    v[i] = *(input_ptr + i);
+  */
+  
+  double lbin[Nbin];
+  std::vector<float> xlist(Nbin);
+
+  for (int i = 0; i < Nbin; ++i) {
+    lbin[i] = *reinterpret_cast<double *>(x_input.get_data() + i * xstrides[0]);
+    xlist[i] = (float)lbin[i];
+  }
+
+  std::vector<double> pressure;
+  pressure = calc_Flender_pressure_profile(cosm_model, z, Mvir, xlist); 
+
+  Py_intptr_t shape[1] = { pressure.size() };
+  npy::ndarray result = npy::zeros(1, shape, npy::dtype::get_builtin<double>());
+  copy(pressure.begin(), pressure.end(), reinterpret_cast<double*>(result.get_data()));
+
+  return result;
+
+}
+
+double return_Ysz(double z, double Mvir){
+
+  cosmo cosm_model(CP.H0, CP.Omega_M, CP.Omega_b, CP.Omega_k, CP.wt);
+  
+  std::vector<float> xlist;
+
+  //radius in unit of R500, x = r/R500
+  float xmin = 1e-4;
+  float xmax = 10.0;
+  float x;
+  for(int i=0;i<Nx;i++){
+    x = (log10(xmax)-log10(xmin))/Nx*(float)(1.*i+0.5) + log10(xmin);
+    x = pow(10.0, x);
+    xlist.push_back(x);
+  }
+	  
+  double Ysz;
+  // Ysz in Mpc^2
+  Ysz= calc_Flender_Ysz (cosm_model, z, Mvir, xlist);
+  return Ysz;
+}
+
+
 BOOST_PYTHON_MODULE( yy_power ){
   Py_Initialize();
   npy::initialize();
@@ -455,7 +520,123 @@ BOOST_PYTHON_MODULE( yy_power ){
   py::def("free_cosmology", free_cosmology);
   py::def("set_Flender_params", set_Flender_params);
   py::def("return_yy_power", return_yy_power);
+  py::def("return_Ysz", return_Ysz);
+  py::def("return_pressure_profile", return_pressure_profile);
 }
+
+double calc_Flender_Ysz (cosmo cosm_model, float z, float Mvir, std::vector<float> x){
+	
+  float conc_norm = F.A_C;
+  float conc_mass_norm = 1.0;
+  float ad_index = 5.0; // Gamma = 1+1./ad_index in arXiv:1706.08972
+  
+  /*
+    float delta_rel = 0.18, delta_rel_n = 0.8, delta_rel_zslope = 0.5; // delta_rel = alpha_0, delta_rel_n  = n_nt, delta_rel_zslope =  beta in Shaw et al 2010
+  
+    float eps_fb = 3.97e-6; // epsilon_f in arXiv:1706.08972
+    float eps_dm = 0.0; // epsilon_DM in arXiv:1706.08972
+    float fs_0 = 0.026; // f_star in arXiv:1706.08972
+    float fs_alpha = 0.12; // S_star in arXiv:1706.08972
+  */
+  float delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  float eps_fb = F.eps_f;
+  float eps_dm = F.eps_DM;
+  float fs_0 = F.f_star;
+  float fs_alpha = F.S_star;
+
+  float gamma_mod0 = F.gamma_mod0;
+  float gamma_mod_zslope = F.gamma_mod_zslope;
+  float x_break = F.x_break;
+  float x_smooth = F.x_smooth;
+
+  float clump0 = F.clump0;
+  float clump_zslope = F.clump_zslope;
+  float x_clump = F.x_clump;
+  float alpha_clump1 = F.alpha_clump1;
+  float alpha_clump2 = F.alpha_clump2;
+
+  int pturbrad = 2;
+  bool verbose = false;
+  float Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0;
+  float Omega_M = cosm_model.get_Omega_M();
+  float Omega_b = cosm_model.get_Omega_b();
+  float h =cosm_model.get_H0()/100.0;
+  float E;
+  // set cluster overdensity
+  // this is the overdensity within which mass defined (i.e. \Delta)
+  // set to -1.0 for virial radius, or 200 for M200 (rhocrit)
+  float overden_id = -1.0; // 200 for delta=200 rho-c , -1 for delta=vir x rho-c
+  int relation = 3; // concentration relation
+  float rcutoff = 2.0;
+	
+  float Redshift = z;
+  cosmic_t = cosm_model.cosmic_time(Redshift);
+  cosmic_t0 = cosm_model.cosmic_time(0.0);
+  E = cosm_model.Efact(Redshift);
+  
+  cluster nfwclus(Mvir, Redshift, overden_id, relation, cosm_model);
+
+  float cvir;	
+  nfwclus.concentration(conc_norm, conc_mass_norm); // set halo concentration using M-c relation of Duffy et al (08)
+  //cvir = conc_norm * c_vir_DK15_fast(z, Mvir);
+  //nfwclus.set_conc(cvir);
+  cvir = nfwclus.get_conc();
+  M500 = nfwclus.get_mass_overden(500.0);// Msun
+  R500 = nfwclus.get_rad_overden(500.0);// (physical) Mpc
+  Rvir = nfwclus.get_radius();
+  //cout << M500 <<' ' << R500 << ' ' << cvir << endl;
+	
+  gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
+	
+  icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
+  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+  icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
+  icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.findxs();
+	
+  icm_mod.solve_gas_model(verbose, 1e-5);
+	
+  //double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  double Rmax = R500;
+  //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
+	
+  double r, pres, dYsz;
+  double Ysz;
+
+  float npoly_mod, gamma_mod;
+  gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
+  npoly_mod = 1.0/(gamma_mod - 1.0 );
+
+  double dvol[x.size()];
+  for(int xi=0;xi<x.size();xi++){
+    r = (double) x[xi]*R500;
+    if ( xi == 0 ) {
+        dvol[xi] = 4.0*M_PI*pow(r, 3.0)/3.0;
+    } else {
+        dvol[xi] = 4.0*M_PI*pow(r, 3.0)/3.0 - dvol[xi-1];
+    }
+  }
+
+  Ysz = 0.0;
+  for(int xi=0;xi<x.size();xi++){
+    // r in Mpc;/
+    r = (double) x[xi]*R500;
+    if(r >= Rmax ){
+        pres = 0.0;
+    } else{
+        pres = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth); //keV cm^-3
+        pres = pres * factor; 
+        dYsz= pres * dvol[xi] ; //keV cm^-3 Mpc^3 
+        Ysz = Ysz + dYsz;		
+    } 
+    
+  }
+  Ysz *= sigma_T/m_elect; // cm^-1 Mpc^3
+  Ysz *= megapc;
+
+  return Ysz;	
+}
+
 
 std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, float Mvir, std::vector<float> x){
 	
@@ -509,19 +690,21 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, flo
 	
   cluster nfwclus(Mvir, Redshift, overden_id, relation, cosm_model);
 	
-  //nfwclus.concentration(conc_norm, conc_mass_norm); // set halo concentration using M-c relation of Duffy et al (08)
   //M500 = nfwclus.get_mass_overden(500.0);// Msun
   //R500 = nfwclus.get_rad_overden(500.0);// (physical) Mpc
   //Rvir = nfwclus.get_radius();
 	
-  float cvir = conc_norm * c_vir_DK15_fast(z, Mvir*h);
-  nfwclus.set_conc(cvir);
+  float cvir;
+  nfwclus.concentration(conc_norm, conc_mass_norm); // set halo concentration using M-c relation of Duffy et al (08)
+  //cvir = conc_norm * c_vir_DK15_fast(z, Mvir*h);
+  //nfwclus.set_conc(cvir);
+  cvir = nfwclus.get_conc();
   M500 = nfwclus.get_mass_overden(500.0);// Msun
   R500 = nfwclus.get_rad_overden(500.0);// (physical) Mpc
   Rvir = nfwclus.get_radius();
 
-  R500_here = R500 * h; // physical Mpc/h
-  
+  R500_here = R500; // physical Mpc
+
   //cout << M500 << " " << R500 << " " << Rvir << endl;
 	
   gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
@@ -533,8 +716,11 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, flo
   icm_mod.findxs();
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
+
+  double P500 = icm_mod.return_P500_arnaud10(M500, E);
 	
-  double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  //double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  double Rmax = 3.0*R500;
   //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
 	
   double r, pres;
@@ -546,7 +732,6 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, flo
   float npoly_mod, gamma_mod;
   gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
   npoly_mod = 1.0/(gamma_mod - 1.0 );
-
   for(int xi=0;xi<x.size();xi++){
     r = (double) x[xi]*R500;
     if(r >= Rmax){pres = 0.0;}
@@ -559,7 +744,6 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, float z, flo
         */
 
         pres = icm_mod.returnPth_mod2(r, R500, x_break, npoly_mod, x_smooth); //keV cm^-3
-    
     } 		
 		
     profile.push_back(pres);
@@ -647,7 +831,8 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, float
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
 	
-  double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  //double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  double Rmax = 3.0*R500;
   //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
 	
   double r, emi;
@@ -763,7 +948,8 @@ std::vector<double> calc_Shaw_xray_emissivity_profile(cosmo cosm_model, float z,
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
 	
-  double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  //double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
+  double Rmax = 3.0*R500;
   //double Yanl = icm_mod.calc_Y(R500, Rvir, Rmax);
 	
   double r, emi;

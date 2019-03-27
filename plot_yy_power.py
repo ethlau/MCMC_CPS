@@ -3,20 +3,27 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import xy_power
+import xx_power
 import time
 
+Tcmb = 2.728
 
-def beam_transfer_function (ell, cl, fwhm) :
+def beam (ell, fwhm=0.5) :
 
     #convert fwhm from arcmin to radian
     fwhm *= (np.pi/180.0)/60.0
-
     sigma = fwhm / (np.sqrt(8.0*np.log(2.0)))
-
-    bl = np.exp(-ell**2 * sigma**2/2.0)
+    bl = np.exp(ell*(ell+1.0) * sigma**2)
 
     return bl
+
+def cl_to_clmuK2 ( power ) :
+
+    return ( power * Tcmb**2.0 * 1.e6 )
+
+def clmuK2_to_cl ( power ) :
+
+    return ( power / (Tcmb**2.0 * 1.e6) )
 
 def power (ell, theta, clump=True) :
 
@@ -42,9 +49,9 @@ def power (ell, theta, clump=True) :
     alpha_clump1 = theta[16]
     alpha_clump2 = theta[17]
 
-    xy_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
 
-    model = xy_power.return_xy_power(ell) # [erg cm^-2 s^-1 str^-1]^2
+    model = xx_power.return_yy_power(ell) # [erg cm^-2 s^-1 str^-1]^2
 
     return model
 
@@ -77,11 +84,12 @@ def main ():
     n_s=0.972000
     inputPk="../input_pk/wmap9_fid_matterpower_z0.dat"
     nH = 2.4e+20
-    xy_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk, 1)
+    opt = 1
+    xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk, opt)
 
     shot_noise = 3.e-22
 
-    ell = 10.**np.linspace(np.log10(1.),np.log10(3.e4), 1000)
+    ell = 10.**np.linspace(np.log10(10.),np.log10(3e4),40)
 
     theta_fid = [4.0, 3.e-5 ,0.026000,0.120000,1.000000,0.180000,0.800000,0.500000,0.100000,1.720000,0.195000,0.010000,0.800000,0.670000,0.730000,1.230000,0.880000, 3.85000]
 
@@ -90,11 +98,16 @@ def main ():
     param_label_dict = {'eps_f':r'$\epsilon_f$', 'eps_DM':r'$\epsilon_{DM}$', 'f_star':r'$f_\star$', 'S_star':r'$S_\star$', 'A_C':r'$A_C$','alpha_nt':r'$\alpha_{nt}$', 'n_nt':r'$n_{nt}$', 'beta_nt':r'$\beta_{nt}$', 'gamma_mod0':r'$\Gamma_0$', 'gamma_mod_zslope':r'$\beta_\Gamma$', 'n_nt_mod':'$n_{nt,mod}$', 'clump0':r'$C_0$', 'clump_zslope':r'$\beta_C$','x_clump':r'$x_{C}$', 'alpha_clump1':r'$\alpha_{C1}$', 'alpha_clump2':r'$\alpha_{C2}$'}
 
 
-    #rosat_ell, rosat_cl, rosat_var = read_data("../ROSAT/rosat_R6_planck_mask_hfi_R2_small_ell.txt")
-    #rosat_cl *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
-    #rosat_cl_err = np.sqrt(rosat_var)*rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
-
     params = [ 'eps_f', 'f_star', 'S_star', 'alpha_nt', 'n_nt', 'beta_nt', 'gamma_mod0', 'gamma_mod_zslope', 'clump0', 'clump_zslope', 'x_clump', 'alpha_clump1', 'alpha_clump2' ]
+    #param_list = ['eps_f', 'f_star', 'S_star', 'clump0', 'alpha0']
+    #param_list = ['f_star', 'S_star', 'clump0']
+    #param_list = ['gamma_mod0']
+    params = ['eps_f']
+
+    planck_ell, planck_cl, planck_var = read_data("../Planck/planck_mask_hfi_R2_small_ell.txt")
+    planck_cl *= planck_ell*(planck_ell+1.)/(2.0*math.pi)
+    planck_cl_err = np.sqrt(planck_var)*planck_ell*(planck_ell+1.)/(2.0*math.pi)
+
 
     for param in params :
 
@@ -104,14 +117,19 @@ def main ():
         param_val_list = []
         color_list = ['C0', 'C1', 'C2', 'C3', 'C4']
        
-        for i in [0.1,0.5,1.0,1.5,2.0]:
+        varlist = [0.1, 0.5, 1.0, 1.5, 2.0]
+        #for i in [0.01, 0.1, 1.0, 1.67]:
+        for i in [1.0]:
+        #for i in varlist:
             param_val = param_fid * i
+            #param_val = i
             param_val_list.append(param_val)
 
 
         f = plt.figure( figsize=(5,5) )
         ax = f.add_axes([0.18,0.16,0.75,0.75])
 
+        #ax.errorbar(planck_ell, planck_cl, yerr = planck_cl_err, color='k', label=r"Planck")
         cl_list = []
         for counter ,param_val in enumerate(param_val_list) :
             theta = theta_fid.copy()
@@ -122,30 +140,24 @@ def main ():
             end = time.time()
             print("Elapsed time: %s" % (end - start))
             cl *= ell*(ell+1)/(2.0*math.pi)
-            #psn = np.full(ell.shape, shot_noise, dtype = np.float64)
-            #psn *=  ell*(ell+1)/(2.0*math.pi)
-            #total = cl + psn
-            cl_list.append(cl)
+            cl *= (1.e6 * Tcmb)**2
+            #cl *= Tcmb**2.0 * 1.e6
 
             label_str = param_label_dict[param]+'$= %.3f $'% (param_val)
             if param == 'eps_f' :
                 label_str = param_label_dict[param]+r'$= %.1f \times 10^{-6}$'% (param_val)
-            #ax.plot (ell, total, ls = '-', color=color_list[counter], label = label_str)
             ax.plot (ell, cl, ls = '-', color=color_list[counter], label = label_str)
-            #ax.plot (ell, psn, ls = ':', color=color_list[counter])
-
-        #ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', label=r"data")
 
         ax.set_xlim ( 10, 3e3 )
-        #ax.set_ylim ( 1e-19, 1e-13)
         ax.set_xlabel(r'$\ell$')
-        ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}^{xy}/2\pi\,[{\rm erg^{2}s^{-2}cm^{-4}str^{-2}}]$')
+        ax.set_ylabel(r'$10^{12}\ell(\ell+1)C_{\ell}^{yy}/2\pi$')
 
         ax.set_xscale('log')
         ax.set_yscale('log')
         ax.legend(loc='best')
 
-        outname = '../plots/'+param+'_xy_power.pdf'
+        outname = param+'_yy_power.png'
+        #outname = param+'_xx_power.png'
         f.savefig(outname)
         f.clf()
 

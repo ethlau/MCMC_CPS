@@ -17,7 +17,7 @@ using namespace std;
 class cosmo {
 
  protected:
-  float H0, Omega_M, Omega_b, rho_crit, a, Omega_k, Omega_L, wt;
+  float H0, Omega_M, Omega_b, rho_crit, a, Omega_k, Omega_L, wt, hubble;
   float PI, m_sun, G, mpc, gnewt;
 
  public:
@@ -36,6 +36,7 @@ class cosmo {
       G = 6.67e-11/1.0e9; // in km^3 kg^-1 s^-2
       mpc = 3.0857e19; // in km
       gnewt = G*m_sun/mpc; //for cosm params (in km^2 Mpc msun^-1 s^-2)
+      hubble = H0/100.0;
     }
 
   float get_Omega_M() {

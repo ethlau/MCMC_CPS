@@ -79,7 +79,6 @@ def lnlike(theta, x, y, invcov):
     double n_nt_mod; // fiducial : 0.80
     '''
     #alpha0, n_nt, beta, eps_f, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod = theta
-    #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
 
     #eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
     eps_f, f_star, S_star, clump0, log_noise  = theta
