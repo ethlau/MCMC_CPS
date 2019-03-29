@@ -47,22 +47,7 @@ void set_fiducial_parameters (struct parameters *params);
 
 void set_parameters (double pzero, double p1, double p2, double p3, double p4, double p5, double p6, double p7, double p8, double p9, double p10, double p11, double p12, double p13, double p14, double p15, double p16, double p17, struct parameters *params);
 
-struct model_param{
-
-  double conc_norm = 1.0;
-  double conc_mass_norm = 1.0;
-  //static double conc_norm, conc_mass_norm;
-  double delta_rel, delta_rel_n, delta_rel_zslope;
-  double ad_index;
-  double eps_fb, eps_dm;
-  double fs_0, fs_alpha;
-  double pturbrad = 2.0;
-  bool verbose = false;
-  double overden_id = -1.0;
-  int relation = 3;
-  double rcutoff = 2.0;
-
-};
+struct my_func_params { float a; float b; float c; double d; int e;float f;};
 
 /*
 double Shaw_model_param::conc_norm = 1.0;
@@ -106,43 +91,40 @@ void gxs_fdf (double x, void *p, double *y, double *dy);
 
 class gas_model {
 
-friend double sx_func (double x, void * params);
-friend double ss_func (double x, void * params);
-friend double fx_func (double x, void * params);
-friend double ftx_func (double x, void * params);
-friend double tx_func (double x, void * params);
-friend double tx_func_p (double x, void * params);
-friend double ttx_func (double x, void * params);
-friend double gasmod_apply_bc(const gsl_vector * x, void *p);
-friend double yproj_func(double x, void * params);
-friend double yint_func(double x, void * p);
-friend double yint_func_sam(double x, void * p);
-friend double yfft_func(double x, void * p);
-friend double kappa_integrant(double x, void* p);
-friend double arnaud_func(double x, void * p);
-friend double proj_arnaud_func(double x, void * p);
-friend double mgas500_func(double x, void * p);
-friend double mgas500_func_mod(double x, void * p);
-friend double mgas500_func_mod_clumped(double x, void * p);
-friend double yfft_func_k(double x, void * p);
-friend double gasproj_func(double x, void * p);
-friend double gasproj_func_mod(double x, void * p);
-friend double NFWproj_func(double x, void * p);
-friend int gasmod_constraints(const gsl_vector * x, void *p, gsl_vector * f);
-friend double gxs (double x, void *p);
-friend double dgxs (double x, void *p);
-friend void quadratic_fdf (double x, void *p, double *y, double *dy);
+    friend double sx_func (double x, void * params);
+    friend double ss_func (double x, void * params);
+    friend double fx_func (double x, void * params);
+    friend double ftx_func (double x, void * params);
+    friend double tx_func (double x, void * params);
+    friend double tx_func_p (double x, void * params);
+    friend double ttx_func (double x, void * params);
+    friend double yproj_func(double x, void * params);
+    friend double yint_func(double x, void * p);
+    friend double yint_func_sam(double x, void * p);
+    friend double yfft_func(double x, void * p);
+    friend double kappa_integrant(double x, void* p);
+    friend double arnaud_func(double x, void * p);
+    friend double proj_arnaud_func(double x, void * p);
+    friend double mgas500_func(double x, void * p);
+    friend double mgas500_func_mod(double x, void * p);
+    friend double mgas500_func_mod_clumped(double x, void * p);
+    friend double yfft_func_k(double x, void * p);
+    friend double gasproj_func(double x, void * p);
+    friend double gasproj_func_mod(double x, void * p);
+    friend double NFWproj_func(double x, void * p);
+    friend int gasmod_constraints(const gsl_vector * x, void *p, gsl_vector * f);
+    friend double gxs (double x, void *p);
+    friend double dgxs (double x, void *p);
+    friend void quadratic_fdf (double x, void *p, double *y, double *dy);
 
-
-protected:
+    protected:
 
     double delta_rel, delta_rel_n, n, eps, eps_dm, fs_0, fs_alpha, f_s, Mpiv, chi_turb, delta_rel_zslope;
     double pturbrad;
     double C, ri, rhoi, mass, radius, vcmax, mgas, Ytot, pressurebound, R500toRvir;
     double xs;
     double final_beta, final_Cf, p0, rho0, T0; // need to define these
-    double PI, m_sun, G, mpc, mu_e, mmw, m_p, clight, eV, sigma_T, me_csq, m_e, q;
-    double Aprime, Bprime;
+    //double Aprime, Bprime;
     double Tau_d, Tau_b, bulge_frac;
     double *x, *k;
     double *ysz, *fft_ysz, *ell;
@@ -151,30 +133,14 @@ protected:
 
     double clump0, alpha_clump1, alpha_clump2, x_clump;
 
-    double p0 = {0.,0.,0.,0.,0.,0.,0.,0.,0.};
+    double m_sun, clight, mpc, G, mu_e, mmw, m_p, eV, sigma_T, m_e, charge, me_csq; 
 
-public:
+    public:
 
-/*
-gas_model(double inp1, double inp2, double inp3, double Ap, double Bp, double inp5, int inp4, double  inp9) { // SF: don't know what this does
-        Mpiv = 3.0e14; //in Msol
+    gas_model() {
         set_constants();
-        delta_rel = inp1;
-        n = inp2;
-        C = inp3;
-        pturbrad = inp4;
-        if (pturbrad==1) chi_turb = (n-1.0)/(-1.0*(n+1.0));
-        else chi_turb = 0.0;
-        Aprime = Ap;
-        Bprime = Bp;
-        f_s = inp5;
-        delta_rel_n = inp9; //0.8;
-        pressurebound = 1.0;
-}
-*/
-
-// gas_mod(delta_rel, n, eps, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n) 
-gas_model(double *p) {
+    }
+    gas_model(double *p) {
 
         delta_rel = p[0];
         n = p[1];
@@ -185,7 +151,6 @@ gas_model(double *p) {
         pturbrad = p[6];
         delta_rel_zslope = p[7];
         delta_rel_n = p[8];
-        C = p[9];
 
         Mpiv = 3.0e14; // in Msol
         if ((int)pturbrad==1) chi_turb = (n-1.0)/(-1.0*(n+1.0));
@@ -197,46 +162,7 @@ gas_model(double *p) {
         bulge_frac = 0.9;
         Tau_d = 4.5;//4.5; // in Gyr
         Tau_b = 1.5;//1.5; // in Gyr
-}
-
-void set_constants() {
-    PI = 4.*atan(1.);
-    m_sun = 1.98892e30; //kg
-    clight = 3.0e5; // in km/s
-    mpc = 3.0857e22; // in m
-    G = 6.67e-11*m_sun/pow(mpc,3); // in mpc^3/Msun/s^2
-    //mu_e = 1.143; // SF: mean molecular weight per electron
-    mu_e = 1.136; // X=0.76 assumed
-    //mmw = 0.59; // mean molecular weight
-    mmw = 0.58824; // X=0.76 assumed
-    m_p  = 1.6726e-27;// mass proton, kg
-    eV = 1.602e-19; // 1eV in J
-    sigma_T = 6.652e-25/(1.0e4); // now in m^2.
-    m_e = 9.11e-31; // mass electron, kg
-    q = 1.60217646e-19;// joules
-    me_csq = m_e*clight*clight*1.0e6/(1000.0*q); // in KeV
-}
-
-/* SF: origin of mu_e and mmw:
-for the tSZ we have DeltaT/T = sigma_T/me_csq int P_e dl
-now we need to convert P_e ~ n_e to P_gas ~ n_gas.
-n_gas = rho_gas/mu, where mu = 4/(3+5X_H) = 0.59 is the mean atomic weight in a fully ionized gas (Suman calls it mmw)
-Now,
-n_e = zeta * rho_gas, with zeta = (X_H/m_H + 2*Y_He/m_He).
-The factor of 2 comes from the fact that Helium is doubly ionized!
-Putting everything together, we have
-n_e = zeta * mu * n_gas and thus
-P_e = zeta * mu * P_gas.
-With Y_He=0.2477 we have zeta=0.87 (in atomic units) and mu=0.59 (in atomic units)
-Suman calls mu = mmw and zeta = 1/mu_e.
-Then the tSZ normalization is
-zeta*mu = mmw/mu_e = 0.5133
-
-For the kSZ the normalization is different (integrated density instead of integrated pressure)
-DeltaT/T = sigma_T/c * int n_e v_los dl
-now n_e = zeta * rho_gas, as above. Then we have simply
-DeltaT/T = sigma_T/c * v_los * zeta * int dl rho_gas
-*/
+    }
 
 void evolve_pturb_norm(double z, double outer_radius) { //compute alpha(z)
     double fmax, evo_power, evo_converge;
@@ -259,7 +185,7 @@ void evolve_pturb_norm(double z, double outer_radius) { //compute alpha(z)
         delta_rel *= min(evo_power, evo_converge); //v2 of model
         //delta_rel *= evo_power; //v1 of model
     }
-        //cout << "delta_rel at z = " << delta_rel << endl;
+    //cout << "delta_rel at z = " << delta_rel << endl;
 }
 
 void set_nfw_params(double bmass, double bradius, double conc, double brhoi, double r500) { // set the NFW parameters
@@ -271,28 +197,106 @@ void set_nfw_params(double bmass, double bradius, double conc, double brhoi, dou
     //cout<< mass<<" "<<ri<<endl;
     ri = ri*mpc/1000.0; //in km (for later units)
     // SO after calling this, ri is always in units km!
-    vcmax = sqrt(4.0*PI*G*rhoi*ri*ri*Gmax()); //% in km/s
+    vcmax = sqrt(4.0*M_PI*G*rhoi*ri*ri*Gmax()); //% in km/s
     //findxs();// now can calculation radius within which stellar mass is contained
     R500toRvir= r500/radius;
+}
+
+void set_constants() {
+
+    m_sun = 1.98892e30; //kg
+    clight = 3.0e5; // in km/s
+    mpc = 3.0857e22; // in m
+    G = 6.67e-11*m_sun/pow(mpc,3); // in mpc^3/Msun/s^2
+    //mu_e = 1.143; // SF: mean molecular weight per electron
+    mu_e = 1.136; // X=0.76 assumed
+    //mmw = 0.59; // mean molecular weight
+    mmw = 0.58824; // X=0.76 assumed
+    m_p  = 1.6726e-27;// mass proton, kg
+    eV = 1.602e-19; // 1eV in J
+    sigma_T = 6.652e-25/(1.0e4); // now in m^2.
+    m_e = 9.11e-31; // mass electron, kg
+    charge = 1.60217646e-19;// joules
+    me_csq = m_e*clight*clight*1.0e6/(1000.0*charge); // in KeV
+
 }
 
 void set_mgas_init(double baryon_frac_univ) {
     mgas = (baryon_frac_univ)*mass/(1.0+f_s);
 }
 
+void set_mass(double inp) {
+    mass = inp;
+}
+
+void set_ri(double inp) {
+    ri = inp;
+}
+
+void set_vcmax(double inp) {
+    vcmax = inp;
+}
+
+void set_mgas(double inp) {
+    mgas = inp;
+}
+
+void set_delta_rel(double inp) {
+    delta_rel = inp;
+}
+
+void set_delta_rel_n(double inp) {
+    delta_rel_n = inp;
+}
+
+void set_n(double inp) {
+    n = inp;
+}
+
+void set_pturbrad(double inp) {
+    pturbrad = inp;
+}
+
+void set_C(double inp){
+    C = inp;
+}
+
+void set_xs(double inp){
+    xs = inp;
+}
+
+void set_f_s(double inp){
+    f_s = inp;
+}
+
+
+double get_C(){
+    return C;
+}
+
+double get_n(){
+    return n;
+}
+
+double get_delta_rel(){
+    return delta_rel;
+}
+
+double get_f_s(){
+    return f_s;
+}
+
 
 void calc_fs(double M500, double baryon_frac_univ, double cosm_t0, double cosm_tz) { // compute the star fraction
     //---note M500 must be in Msol
 
-    assert (fs_0 >= 0);
     f_s = min(fs_0 * pow(M500/Mpiv,-1.0*fs_alpha), 0.8*baryon_frac_univ); //
     if (f_s < 0) {
         cout << f_s << endl;
         cout << fs_0 << " " << M500/Mpiv << " " << fs_alpha << endl;
     }
-    assert (f_s >= 0);
     //f_s = f_s / (baryon_frac_univ - f_s); // f_s is now the star formation efficiency
-
+    assert (f_s >= 0);
     //---uncomment this line for z-evolution:
     //f_s = f_s*calc_fstarz(cosm_t0, cosm_tz);
 
@@ -331,25 +335,6 @@ double g(double x) { // eqn 2b
     return log(1.0+x) - x/(1.0+x);
 }
 
-double findxs_old() { // solve for x_s (sec 3.1)
-    // start here!
-    vector<double> x(2000), gg(2000);
-    int i;
-    double mingg;
-    for (i=0;i<10000;i++) {
-        x[i] = 0.0 + double(i)*(2.0*C/2000.0);
-        gg[i] = fabs(g(x[i]) - g(C)*f_s/(1+f_s));
-    }
-    mingg =  *min_element(gg.begin(), gg.end());
-    i = 0;
-    if (mingg>2e-3) {
-        cout << "Convergence xs error " << mingg << endl;
-    }
-    while (gg[i]!=mingg) {i++;}
-    xs = x[i];
-    return xs;
-}
-
 double findxs() { // solve for x_s (sec 3.1)
 
     int status;
@@ -357,7 +342,7 @@ double findxs() { // solve for x_s (sec 3.1)
     const gsl_root_fsolver_type *T;
     gsl_root_fsolver *s;
     
-    double x_lo = 0.0, x_hi = 1000.*C, x;
+    double x_lo = 0.0, x_hi = 10.*C, x_guess;
     double p[2] = { C, f_s }; 
 
     gsl_function F;
@@ -366,33 +351,35 @@ double findxs() { // solve for x_s (sec 3.1)
 
     T = gsl_root_fsolver_brent;
     s = gsl_root_fsolver_alloc(T);
-    //gsl_set_error_handler_off();
     status = gsl_root_fsolver_set (s, &F, x_lo, x_hi);
 
-    //printf ("using %s method\n",
-    //      gsl_root_fsolver_name (s));
+    //printf ("using %s method\n", gsl_root_fsolver_name (s));
     assert( f_s >= 0);
-    assert( C >= 0);
+
     do {
       iter++;
       status = gsl_root_fsolver_iterate (s);
-      x = gsl_root_fsolver_root (s);
+      x_guess = gsl_root_fsolver_root (s);
       x_lo = gsl_root_fsolver_x_lower (s);
       x_hi = gsl_root_fsolver_x_upper (s);
-      status = gsl_root_test_interval (x_lo, x_hi, 0, 1e-3);
+      status = gsl_root_test_interval (x_lo, x_hi, 0, 1.e-3);
     
-    //printf ("%5d [%.7f, %.7f] %.7f\n",
-    //          iter, x_lo, x_hi, x);
+      //printf ("%5d [%.7f, %.7f] %.7f\n", iter, x_lo, x_hi, x_guess);
 
     } while (status == GSL_CONTINUE && iter < max_iter);
 
     if (status != GSL_SUCCESS ) {
-        printf ("xs does not converged!\n");
-        x = C;
+        printf ("xs did not converge! Setting xs to C.\n");
+        xs = C;
+    } else {
+        xs = x_guess;
     }
     
     gsl_root_fsolver_free (s);
-    xs = x;
+    //cout << "In findxs: " << endl;
+    //cout << "  C = " << C << endl;
+    //cout << "  f_s = " << f_s << endl;
+    //cout << "  xs = " << xs << endl;
     return xs;
 }
 
@@ -413,28 +400,29 @@ double delta_s() { // eqn 15
 
 double S_C(double x) { // eqn 11
     double SC;
-    SC = pow(PI,2)/2.0 - log(x)/2.0 - 1.0/(2.0*x) - 1.0/(2.0*pow(1.0+x,2)) - 3.0/(1+x);
+    SC = M_PI*M_PI/2.0 - log(x)/2.0 - 1.0/(2.0*x) - 1.0/(2.0*pow(1.0+x,2)) - 3.0/(1+x);
     SC += (0.5 + 1.0/(2.0*pow(x,2)) - 2.0/x - 1.0/(1.0+x))*log(1.0+x);
     SC += (3.0/2.0)*log(1.0+x)*log(1.0+x);
     SC += 3.0*gsl_sf_dilog(-1.0*x); // gsl dilog function
     //SC = SC*g(x)*g(x);// this is the correction made to Ostriker et al 05.
     // (Mar 10) Don't think it should be here.
-    return (double)SC;
+    return SC;
 }
 
 void test_dilog() {
     cout << gsl_sf_dilog(-3.0) << endl;
 }
+
 double S_cx(double x) { // % eqn 7b
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (2000);
     double result, error, Sx, alpha = 0.0;
     gsl_function F;
     F.function = &sx_func;
-    if (x==0) x = 1e-7; //% diverges at x = 0
-    gsl_integration_qags (&F, x, C, 0, 1e-7, 2000, w, &result, &error);
-    Sx = S_C(C) - (double)result;
+    if (x==0) x = 1.e-7; //% diverges at x = 0 
+    gsl_integration_qags (&F, x, C, 0, 1.e-7, 2000, w, &result, &error);
+    Sx = S_C(C) - result;
     gsl_integration_workspace_free (w);
-    return (double)Sx;
+    return Sx;
 }
 
 double K(double x) { //% eqn 16
@@ -444,14 +432,15 @@ double K(double x) { //% eqn 16
 
 double K_s() { // % eqn 21
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
-    double resulta, resultb, error, Ks;
+    double resulta, resultb, error, Ks, tempC = C;
     gsl_function F,FF;
     F.function = &ss_func;
     FF.function = &fx_func;
-    F.params = p0;
-    FF.params = p0;
-    gsl_integration_qags (&F, 0.0e-4, xs, 0, 1e-7, 10000, w, &resulta, &error);
-    gsl_integration_qags (&FF, 0.0e-4, xs, 0, 1e-7, 10000, w, &resultb, &error);
+    F.params = &tempC;
+    FF.params = &tempC;
+    //cout << "In K_s: xs= "<< xs << endl;
+    gsl_integration_qags (&F, 0.0, xs, 0, 1.e-7, 10000, w, &resulta, &error);
+    gsl_integration_qags (&FF, 0.0, xs, 0, 1.e-7, 10000, w, &resultb, &error);
     Ks = (1.0/g(C))*(resulta - (2.0/3.0)*resultb);
     gsl_integration_workspace_free (w);
     return Ks;
@@ -498,11 +487,12 @@ double j(double x) { //% eqn 25b
 double I2(double Cf, double beta) {// % eqn 28a
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
-    double params[5] = {delta_rel, n, C, beta, pturbrad };
+    double params[5] = {delta_rel, n, pturbrad, C, beta};
     gsl_function F;
     F.function = &ftx_func;
     F.params = &params;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1e-5, 10000, w, &result, &error);
+    //cout << "In I2: Cf, beta= "<< Cf << " " << beta << endl;
+    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
     gsl_integration_workspace_free (w);
     return result;
 }
@@ -532,11 +522,12 @@ double I2spline(double Cf, double beta) {// % eqn 27
 double I3(double Cf, double beta) {// % eqn 28b
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
-    double params[5] = { delta_rel, n, C, beta, pturbrad };
+    double params[5] = {delta_rel, n, pturbrad, C, beta};
     gsl_function F;
     F.function = &tx_func;
     F.params = &params;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1e-5, 10000, w, &result, &error);
+    //cout << "In I3: Cf, beta= "<< Cf << " " << beta << endl;
+    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
     //cout << "I3: " << result << endl;
     gsl_integration_workspace_free (w);
     return result;
@@ -567,12 +558,13 @@ double I3spline(double Cf, double beta) {// % eqn 27 {
 double I3p(double Cf, double beta) {// % eqn 28b
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
-    double params[5] = { delta_rel, n, C, beta, pturbrad };
+    double params[5] = {delta_rel, n, pturbrad, C, beta};
     gsl_function F;
     if ((int)pturbrad==1) F.function = &tx_func_p;
     else F.function = &tx_func;
     F.params = &params;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1e-5, 10000, w, &result, &error);
+    //cout << "In I3p: Cf, beta= "<< Cf << " " << beta << endl;
+    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
     //cout << "I3: " << result << endl;
     gsl_integration_workspace_free (w);
     if ((int)pturbrad==0) result = result*delta_rel*2.0; // check factor of 2!
@@ -608,11 +600,12 @@ double I3p_spline(double Cf, double beta) {// % eqn 27 {
 double L(double Cf, double beta) {// % eqn 27
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error, Sx;
-    double params[5] = {delta_rel, n, C, beta, pturbrad };
+    double params[5] = {delta_rel, n, pturbrad, C, beta};
     gsl_function F;
     F.function = &ttx_func;
     F.params = &params;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1e-5, 10000, w, &result, &error);
+    //cout << "In L: Cf, beta= "<< Cf << " " << beta << endl;
+    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
     //cout << "L: " << result << endl;
     gsl_integration_workspace_free (w);
     return result;
@@ -685,23 +678,23 @@ double Ek(double x, double aniso_beta, double Winf) {
     if (aniso_beta==0.0) {
         K = -3.0 + 3.0/(1.0+x) - 2.0*log(1.0+x) + x*(5.0 + 3.0*log(1.0+x));
         K = K - pow(x,2)*(7.0 + 6.0*log(1.0+x));
-        K = K + pow(x,3)*(PI*PI - log(C) - log(x/C) + log(1.0+x) + 3.0*pow(log(1+x),2) + 6.0* gsl_sf_dilog(-1.0*x));
+        K = K + pow(x,3)*(M_PI*M_PI - log(C) - log(x/C) + log(1.0+x) + 3.0*pow(log(1+x),2) + 6.0* gsl_sf_dilog(-1.0*x));
         K = K*0.5;
     }
     else if (aniso_beta==0.5) {
         K = -3.0 + 3.0/(1.0+x) - 3.0*log(1.0+x);
         K = K + 6.0*x*(1.0+log(1.0+x));
-        K = K - pow(x,2)*(PI*PI + 3.0*pow(log(1.0+x),2) + 6.0*gsl_sf_dilog(-1.0*x));
+        K = K - pow(x,2)*(M_PI*M_PI + 3.0*pow(log(1.0+x),2) + 6.0*gsl_sf_dilog(-1.0*x));
         K = K/3;
     }
     else {
         K = -2.0*log(1.0+x);
-        K = K + x*(PI*PI/3.0 - 1.0/(1.0+x) + pow(log(1.0+x),2) + 2.0*gsl_sf_dilog(-1.0*x));
+        K = K + x*(M_PI*M_PI/3.0 - 1.0/(1.0+x) + pow(log(1.0+x),2) + 2.0*gsl_sf_dilog(-1.0*x));
         K = K/2.0;
     }
     return K*Winf;
 }
-
+/*
 double setAprime() {
     Aprime = 1.5*(1.0+f_s)*(Gmax()*K(C)*(3.0-4.0*delta_s()) + K_s());
     Aprime +=  -1.0*(Gmax()*eps*f_s*pow(clight/vcmax,2)) - (Gmax()*eps_dm*fabs(Edm(0.0))/(mgas*pow(vcmax,2)));
@@ -712,24 +705,39 @@ double setBprime() {
     Bprime = (1.0+f_s)*(S_C(C)/g(C));
     return Bprime;
 }
-
+*/
 double energy_constraint(double beta, double Cf) {
+
     double f, Lval;
+    double Aprime, Bprime;
+    double Ks = K_s();
+
+    Aprime = 1.5*(1.0+f_s)*(Gmax()*K(C)*(3.0-4.0*delta_s()) + Ks);
+    Aprime +=  -1.0*(Gmax()*eps*f_s*pow(clight/vcmax,2)) - (Gmax()*eps_dm*fabs(Edm(0.0))/(mgas*pow(vcmax,2)));
+    Bprime = (1.0+f_s)*(S_C(C)/g(C));
+
     if (Cf<=0.0) Cf = C/10.0; // (C<0) is unphysical
     f = Aprime + Bprime*(pow(Cf,3) - pow(C,3))/3.0;
     Lval = Lspline(Cf,beta);
     f += -1.0*I2(Cf,beta)/Lval + (1.5*(I3spline(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
     if (f != f ) {
         cout << "Energy constraint failed! " << endl;
+        cout << "A, B, Lval =" <<  Aprime  << " " << Bprime << " " << Lval << endl;
+        //cout << "f_s, Gmax(), K(C), delta_s(), K_s() = " << f_s << " " << Gmax() << " " << K(C) << " " << delta_s() << " " << Ks << endl; 
+
+        //cout << "eps, vcmax, eps_dm, |Edm|, mgas =" << eps <<  " " << vcmax << " " << eps_dm << " " << fabs(Edm(0.0)) << " " << mgas << endl;
         return 100.0;
     }
     return (f);
 }
 
 double pressure_constraint(double beta, double Cf) {
+
     double f, Cfp;
+
     if (beta<=0.0) beta = 0.1;
     if (Cf<=0.0) Cf = C/10.0;
+
     Cfp = Lvar(Cf, beta);
     f = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
     if ((int)pturbrad==1) f += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
@@ -747,27 +755,23 @@ int solve_gas_model(bool verbose, double tolerance) {
     const gsl_multiroot_fsolver_type *T;
     gsl_multiroot_fsolver *s;
 
-    gsl_vector *x;
+    gsl_vector *v;
 
-    size_t i, iter = 0;
+    size_t i, iter = 0, max_iter=100;
     const size_t ndim = 2;
     int status;
     double size;
-    setAprime();
-    setBprime();
-    //double p[8] = {delta_rel, adiabat_n, C, 0.0, Aprime, Bprime, f_s, pt}; // \beta,_f, C, delta_rel, Ap, Bp
-    double p[9] = {delta_rel, n, eps, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n}
+    double p[16] = {delta_rel, n, eps, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n, C, mass, vcmax, ri, mgas, xs, f_s};
 
     gsl_multiroot_function f = {&gasmod_constraints, ndim, &p};
-
     /* Starting point */
-    x = gsl_vector_alloc (2);
-    gsl_vector_set (x, 0, 1.0);
-    gsl_vector_set (x, 1, C/2.0);
+    v = gsl_vector_alloc (2);
+    gsl_vector_set (v, 0, 1.0);
+    gsl_vector_set (v, 1, C/2.0);
     /* Initialize method and iterate */
     T = gsl_multiroot_fsolver_hybrids;
     s = gsl_multiroot_fsolver_alloc (T,2);
-    gsl_multiroot_fsolver_set (s, &f, x);
+    gsl_multiroot_fsolver_set (s, &f, v);
 
     do {
         iter++;
@@ -776,14 +780,13 @@ int solve_gas_model(bool verbose, double tolerance) {
     	    break;
     	status = gsl_multiroot_test_residual (s->f, tolerance);
     	if ((status == GSL_SUCCESS) & verbose) {
-    	//if ((status == GSL_SUCCESS) ) {
     	    printf ("converged to minimum at\n");
     	    printf ("%5d %10.4e %10.4e\n",
     		    (int)iter,
     		    gsl_vector_get (s->x, 0),
     		    gsl_vector_get (s->x, 1));
-    	  }
-    } while (status == GSL_CONTINUE && iter < 1000);
+    	}
+    } while (status == GSL_CONTINUE && iter < max_iter);
 
     final_beta = gsl_vector_get (s->x, 0);
     final_Cf = gsl_vector_get (s->x, 1);
@@ -796,7 +799,7 @@ int solve_gas_model(bool verbose, double tolerance) {
         setp0rho0(verbose);
     }
 
-    gsl_vector_free(x);
+    gsl_vector_free(v);
     gsl_multiroot_fsolver_free(s);
     return status;
 }
@@ -806,7 +809,7 @@ void setp0rho0(bool verbose) {
         cout << "final_Cf "   << final_Cf << endl;
         cout << "final_beta " << final_beta << endl;
     }
-    rho0 = mgas / (4.0*PI*pow(ri*1000/mpc,3)*Lspline(final_Cf, final_beta)); // in Msol/Mpc^3
+    rho0 = mgas / (4.0*M_PI*pow(ri*1000/mpc,3)*Lspline(final_Cf, final_beta)); // in Msol/Mpc^3
     p0 = rho0*vcmax*vcmax/(final_beta*Gmax()); // in Msol/Mpc^3 (km/s)^2
     T0 = (mmw*m_p*p0/rho0)*(1000.0/eV); // this is in keV
 
@@ -845,7 +848,7 @@ void initialize_profiles(double minr, double maxr, double dr, double ellmin, dou
 
     for (i=0;i<nrads;i++) {
         x[i] = minr + (double)i*dr; //in Mpc
-        k[i]= 2.0*PI/x[i]*radius/c500;
+        k[i]= 2.0*M_PI/x[i]*radius/c500;
     }
 
     fft_ysz = new double [nell];
@@ -928,7 +931,7 @@ double* calc_electron_pressure_profile(double R500) {
 /* Pressure profile from Arnaud et al. (2010) */
 double calc_pressure_Arnaud(double r, double r500, double h, double E){
   double M500, R500, pi, rho_cr, rho_cr0, h70, XH, b_HSE;
-  double P, P_gnfw, P0, c500, alpha, beta, gamma, Mpiv, xi;
+  double P, P_gnfw, P0, c500, alpha_p, beta_p, gamma_p, Mpiv, xi;
 
   pi = 4.0*atan(1.0);
   XH = 0.76;
@@ -952,15 +955,15 @@ double calc_pressure_Arnaud(double r, double r500, double h, double E){
 /* Planck Collaboration (2013) */
   P0 = 6.41;
   c500 = 1.81;
-  gamma = 0.31;
-  alpha = 1.33;
-  beta = 4.13;
+  gamma_p = 0.31;
+  alpha_p = 1.33;
+  beta_p = 4.13;
 
   //Mpiv = 3e14*0.7; //[Msun/h]
   Mpiv = 3e14; //[Msun]
 
   xi = r/R500;
-  P_gnfw = P0/(pow(c500*xi, gamma)*pow(1.0+pow(c500*xi, alpha), (beta-gamma)/alpha));
+  P_gnfw = P0/(pow(c500*xi, gamma_p)*pow(1.0+pow(c500*xi, alpha_p), (beta_p-gamma_p)/alpha_p));
   P = 1.65e-3*pow(E, 8./3.)*pow(M500/Mpiv, 2./3.+0.12)*P_gnfw*h70*h70;
   P = P/((2.0+2.0*XH)/(3.0+5.0*XH));//convert electron pressure to thermal pressure
 
@@ -1061,7 +1064,7 @@ double calc_Y(double R500, double Rvir, double Rmax){
     res = 0.0;
     for(int i=0;i<nx;i++){
         gsl_integration_glfixed_point(0.0, 1.0, i, &x, &w, t);
-        res += w*4.0*PI*x*x*calc_gas_pressure(x*Rmax, R500);
+        res += w*4.0*M_PI*x*x*calc_gas_pressure(x*Rmax, R500);
     }
     res *= pow(Rmax*mpc*1e2, 3.0);
     gsl_integration_glfixed_table_free(t);
@@ -1080,7 +1083,7 @@ double calc_shell_Y(double R500, double Rvir, double rm, double rp){
     for(int i=0;i<nx;i++){
         gsl_integration_glfixed_point(0.0, 1.0, i, &x, &w, t);
         r = (rp-rm)*x+rm; // in Mpc
-        res += w*4.0*PI*r*r*calc_gas_pressure(r, R500);
+        res += w*4.0*M_PI*r*r*calc_gas_pressure(r, R500);
     }
     res *= pow(mpc*1e2, 3.0)*(rp-rm);
     gsl_integration_glfixed_table_free(t);
@@ -1099,7 +1102,7 @@ double calc_shell_Y_Arnaud(double R500, double Rvir, double rm, double rp, doubl
     for(int i=0;i<nx;i++){
         gsl_integration_glfixed_point(0.0, 1.0, i, &x, &w, t);
         r = (rp-rm)*x+rm; // in Mpc
-        res += w*4.0*PI*r*r*calc_pressure_Arnaud(r, R500, h, E);
+        res += w*4.0*M_PI*r*r*calc_pressure_Arnaud(r, R500, h, E);
     }
     res *= pow(mpc*1e2, 3.0)*(rp-rm);
     gsl_integration_glfixed_table_free(t);
@@ -1525,7 +1528,7 @@ double* calc_ellspace_sz_profile(double rcutoff, double ang_diam_z, double redsh
     for (i=0;i<nell;i++) {
         params[4] = ell[i];
         gsl_integration_qags (&F, 0.0, upperlim, 0, 1e-7, 10000, w, &result, &error);
-        result = result*4.0*PI*(1000.0*ri/mpc)/elli/elli;
+        result = result*4.0*M_PI*(1000.0*ri/mpc)/elli/elli;
         fft_ysz[i] = (double)mmw*units*result*p0/mu_e;
     }
     gsl_integration_workspace_free (w);
@@ -1584,7 +1587,7 @@ double* calc_ellspace_sz_profile_spline(double rcutoff, double ang_diam_z, doubl
         }
         gsl_spline_init (spline, xx, yy, nxbins);
         result = gsl_spline_eval_integ (spline, xx[0], xx[nxbins-1], acc);
-        result = result*4.0*PI*(1000.0*ri/mpc)/elli/elli;
+        result = result*4.0*M_PI*(1000.0*ri/mpc)/elli/elli;
         fft_ysz[i] = (double)mmw*units*result*p0/mu_e;
     }
     gsl_spline_free (spline);
@@ -1650,7 +1653,7 @@ double* calc_kspace_sz_profile(double rcutoff, double ang_diam_z, double redshif
     for (i=0;i<nrads;i++) {
         params[4] = k[i];
         gsl_integration_qags (&F, 0.0, upperlim, 0, 1e-7, 10000, w, &result, &error);
-        result = result/2.0/PI/PI; //*4.0*PI*(1000.0*ri/mpc)/elli/elli;
+        result = result/2.0/M_PI/M_PI; //*4.0*M_PI*(1000.0*ri/mpc)/elli/elli;
         ysz[i] = (double)result; //mmw*units*result*p0/mu_e;
     }
     gsl_integration_workspace_free (w);
@@ -1977,7 +1980,7 @@ void calc_2d_gas_profile(double rcutoff, double R500, double *r, double* ysz) {
 double return_Yx500(double R500){
     // returns Yx500 (X-ray observable), using R500 in Mpc
     double Tspec_to_Tmg = 1.11;
-    double units = p0 * pow(mpc,3.0) * 4.0*PI * m_p/m_sun * mmw * pow(R500,3) * Tspec_to_Tmg;
+    double units = p0 * pow(mpc,3.0) * 4.0*M_PI * m_p/m_sun * mmw * pow(R500,3) * Tspec_to_Tmg;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
     double pt = (double)pturbrad;
@@ -1993,7 +1996,7 @@ double return_Yx500(double R500){
 }
 
 double calc_mgas500(double R500) { // R500 has to be in Mpc
-    double units = rho0*4.0*PI*pow(1000.0*ri/mpc,3);
+    double units = rho0*4.0*M_PI*pow(1000.0*ri/mpc,3);
     double NFW_Rs_Mpc = (1000.0*ri/mpc);
     double mgas500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
@@ -2012,7 +2015,7 @@ double calc_mgas500(double R500) { // R500 has to be in Mpc
 
 double calc_mgas500_mod(double R500, double x_break, double npoly_break) {
     // R500 has to be in Mpc, x_break in units of R500
-    double units = rho0*4.0*PI*pow(1000.0*ri/mpc,3);
+    double units = rho0*4.0*M_PI*pow(1000.0*ri/mpc,3);
     double NFW_Rs_Mpc = (1000.0*ri/mpc);
     double mgas500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
@@ -2031,7 +2034,7 @@ double calc_mgas500_mod(double R500, double x_break, double npoly_break) {
 
 double calc_mgas500_mod_clumped(double R500, double x_break, double npoly_break, double x_clump, double alpha_clump1, double alpha_clump2, double clump0) {
     // R500 has to be in Mpc, x_break in units of R500
-    double units = rho0*4.0*PI*pow(1000.0*ri/mpc,3);
+    double units = rho0*4.0*M_PI*pow(1000.0*ri/mpc,3);
     double NFW_Rs_Mpc = (1000.0*ri/mpc);
     double mgas500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
@@ -2061,7 +2064,7 @@ double return_fgas500_mod_clumped(double M500, double R500, double x_break, doub
 }
 
 double calc_mgas2500(double R2500) { // R500 has to be in Mpc
-    double units = rho0*4.0*PI*pow(1000.0*ri/mpc,3);
+    double units = rho0*4.0*M_PI*pow(1000.0*ri/mpc,3);
     double NFW_Rs_Mpc = (1000.0*ri/mpc);
     double mgas2500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
@@ -2078,7 +2081,7 @@ double calc_mgas2500(double R2500) { // R500 has to be in Mpc
 }
 
 double calc_mgas2500_mod(double R2500,double R500, double x_break, double npoly_break) { // R500 has to be in Mpc
-    double units = rho0*4.0*PI*pow(1000.0*ri/mpc,3);
+    double units = rho0*4.0*M_PI*pow(1000.0*ri/mpc,3);
     double NFW_Rs_Mpc = (1000.0*ri/mpc);
     double mgas2500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
