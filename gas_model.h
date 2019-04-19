@@ -85,6 +85,10 @@ double gasproj_func_mod(double x, void * p);
 double NFWproj_func(double x, void * p);
 
 int gasmod_constraints(const gsl_vector * x, void *p, gsl_vector * f);
+int gasmod_constraints_df(const gsl_vector *x, void *p, gsl_matrix *J);
+int gasmod_constraints_fdf(const gsl_vector *x, void *p, gsl_vector *f, gsl_matrix *J);
+
+
 double gxs (double x, void *p);
 double dgxs (double x, void *p);
 void gxs_fdf (double x, void *p, double *y, double *dy);
@@ -113,6 +117,8 @@ class gas_model {
     friend double gasproj_func_mod(double x, void * p);
     friend double NFWproj_func(double x, void * p);
     friend int gasmod_constraints(const gsl_vector * x, void *p, gsl_vector * f);
+    friend int gasmod_constraints_df(const gsl_vector * x, void *p, gsl_matrix * J);
+    friend int gasmod_constraints_fdf(const gsl_vector * x, void *p, gsl_vector * f, gsl_matrix * J);
     friend double gxs (double x, void *p);
     friend double dgxs (double x, void *p);
     friend void quadratic_fdf (double x, void *p, double *y, double *dy);
@@ -120,7 +126,7 @@ class gas_model {
     protected:
 
     double delta_rel, delta_rel_n, n, eps, eps_dm, fs_0, fs_alpha, f_s, Mpiv, chi_turb, delta_rel_zslope;
-    double pturbrad;
+    int pturbrad;
     double C, ri, rhoi, mass, radius, vcmax, mgas, Ytot, pressurebound, R500toRvir;
     double xs;
     double final_beta, final_Cf, p0, rho0, T0; // need to define these
@@ -138,22 +144,23 @@ class gas_model {
     public:
 
     gas_model() {
+        pturbrad = 2;
         set_constants();
     }
     gas_model(double *p) {
 
+        pturbrad = 2;
         delta_rel = p[0];
         n = p[1];
         eps = p[2];
         eps_dm = p[3];
         fs_0 = p[4];
         fs_alpha = p[5];
-        pturbrad = p[6];
-        delta_rel_zslope = p[7];
-        delta_rel_n = p[8];
+        delta_rel_zslope = p[6];
+        delta_rel_n = p[7];
 
         Mpiv = 3.0e14; // in Msol
-        if ((int)pturbrad==1) chi_turb = (n-1.0)/(-1.0*(n+1.0));
+        if (pturbrad==1) chi_turb = (n-1.0)/(-1.0*(n+1.0));
         else chi_turb = 0.0;
         set_constants();
 
@@ -216,8 +223,9 @@ void set_constants() {
     eV = 1.602e-19; // 1eV in J
     sigma_T = 6.652e-25/(1.0e4); // now in m^2.
     m_e = 9.11e-31; // mass electron, kg
-    charge = 1.60217646e-19;// joules
-    me_csq = m_e*clight*clight*1.0e6/(1000.0*charge); // in KeV
+    //charge = 1.60217646e-19;// joules
+    //me_csq = m_e*clight*clight*1.0e6/(1000.0*charge); // in KeV
+    me_csq = 511.0; // in KeV
 
 }
 
@@ -251,10 +259,6 @@ void set_delta_rel_n(double inp) {
 
 void set_n(double inp) {
     n = inp;
-}
-
-void set_pturbrad(double inp) {
-    pturbrad = inp;
 }
 
 void set_C(double inp){
@@ -295,7 +299,7 @@ void calc_fs(double M500, double baryon_frac_univ, double cosm_t0, double cosm_t
         cout << f_s << endl;
         cout << fs_0 << " " << M500/Mpiv << " " << fs_alpha << endl;
     }
-    //f_s = f_s / (baryon_frac_univ - f_s); // f_s is now the star formation efficiency
+    f_s = f_s / (baryon_frac_univ - f_s); // f_s is now the star formation efficiency
     assert (f_s >= 0);
     //---uncomment this line for z-evolution:
     //f_s = f_s*calc_fstarz(cosm_t0, cosm_tz);
@@ -362,14 +366,14 @@ double findxs() { // solve for x_s (sec 3.1)
       x_guess = gsl_root_fsolver_root (s);
       x_lo = gsl_root_fsolver_x_lower (s);
       x_hi = gsl_root_fsolver_x_upper (s);
-      status = gsl_root_test_interval (x_lo, x_hi, 0, 1.e-3);
+      status = gsl_root_test_interval (x_lo, x_hi, 0, 1.e-5);
     
       //printf ("%5d [%.7f, %.7f] %.7f\n", iter, x_lo, x_hi, x_guess);
 
     } while (status == GSL_CONTINUE && iter < max_iter);
 
     if (status != GSL_SUCCESS ) {
-        printf ("xs did not converge! Setting xs to C.\n");
+        cout << "xs did not converge! Setting xs to C." << endl;
         xs = C;
     } else {
         xs = x_guess;
@@ -431,7 +435,13 @@ double K(double x) { //% eqn 16
 }
 
 double K_s() { // % eqn 21
-    gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
+
+    if (xs <= 0 ) {
+        cout << "In K_s: xs = "<< xs << " is less than zero! " << endl;
+        return 0.0;
+    }
+
+    gsl_integration_workspace * w = gsl_integration_workspace_alloc (1000);
     double resulta, resultb, error, Ks, tempC = C;
     gsl_function F,FF;
     F.function = &ss_func;
@@ -439,8 +449,8 @@ double K_s() { // % eqn 21
     F.params = &tempC;
     FF.params = &tempC;
     //cout << "In K_s: xs= "<< xs << endl;
-    gsl_integration_qags (&F, 0.0, xs, 0, 1.e-7, 10000, w, &resulta, &error);
-    gsl_integration_qags (&FF, 0.0, xs, 0, 1.e-7, 10000, w, &resultb, &error);
+    gsl_integration_qags (&F, 0.0, xs, 0, 1.e-7, 1000, w, &resulta, &error);
+    gsl_integration_qags (&FF, 0.0, xs, 0, 1.e-7, 1000, w, &resultb, &error);
     Ks = (1.0/g(C))*(resulta - (2.0/3.0)*resultb);
     gsl_integration_workspace_free (w);
     return Ks;
@@ -448,13 +458,13 @@ double K_s() { // % eqn 21
 
 double theta(double x, double beta) { // % eqn 26b
     double th;
-    if ((int)pturbrad==1) {
+    if (pturbrad==1) {
         th = (-1.0*beta*j(x)/(n+1.0) + 1.0 + chi_turb*delta_rel)/2.0;
         th = th + 0.5*sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel);
     }
-    else if ((int)pturbrad==2) th =  (double)(1.0 - (beta*j(x)/(1.0+n)));
-    else th =  (double)(1.0 - (beta*j(x)/((1.0+n)*(1.0+delta_rel))));
-    return (double)fabs(th);
+    else if (pturbrad==2) th = (1.0 - (beta*j(x)/(1.0+n)));
+    else th =  (1.0 - (beta*j(x)/((1.0+n)*(1.0+delta_rel))));
+    return fabs(th);
 }
 
 double theta_mod(double x, double beta, double x_break, double npoly_mod) {
@@ -463,16 +473,54 @@ double theta_mod(double x, double beta, double x_break, double npoly_mod) {
     // x_break is here in units of the NFW scale radius
     // ---
     double th;
-    if ((int)pturbrad!=2){cout<<"ERROR! -- pturbrad should be 2 for computing theta_mod!"; return -1;}
+    if (pturbrad!=2){cout<<"ERROR! -- pturbrad should be 2 for computing theta_mod!"; return -1;}
 
     if (x>=x_break){
-        th = (double)(1.0 - (beta*j(x)/(1.0+n)));
+        th = (1.0 - (beta*j(x)/(1.0+n)));
     }
     else if (x<x_break){
-        th = (double)(1.0 - (beta*j(x)/(1.0+npoly_mod))) * (1.0 - (beta*j(x_break)/(1.0+n)))/(1.0 - (beta*j(x_break)/(1.0+npoly_mod)));
+        th = (1.0 - beta*j(x)/(1.0+npoly_mod)) * (1.0 - beta*j(x_break)/(1.0+n))/(1.0 - beta*j(x_break)/(1.0+npoly_mod));
     }
+    return fabs(th);
+}
 
-    return (double)fabs(th);
+double dthetadx(double x, double beta) { // % eqn 26b
+    double th;
+    /*
+    if ((pturbrad==1) {
+        th = (-1.0*beta*j(x)/(n+1.0) + 1.0 + chi_turb*delta_rel)/2.0;
+        th = th + 0.5*sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel);
+    }
+    else if (pturbrad==2) th =  (double)(1.0 - (beta*j(x)/(1.0+n)));
+    else th =  (double)(1.0 - (beta*j(x)/((1.0+n)*(1.0+delta_rel))));
+    */
+    if (pturbrad==1) {
+        th = (-1.0*beta*djdx(x)/(n+1.0))/2.0;
+        th = th + 0.5/(sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel))*(1.0+chi_turb*delta_rel - beta*j(x)/(n+1.0))*(-beta*djdx(x)/(n+1.0));
+    }
+    else if (pturbrad==2) {
+        th =  - beta*djdx(x)/(1.0+n);
+    } 
+    else {
+        th =  - beta*djdx(x)/((1.0+n)*(1.0+delta_rel));
+    }
+    return th;
+}
+
+
+double dthetadbeta(double x, double beta) { // % eqn 26b
+    double th;
+    if (pturbrad==1) {
+        th = -0.5*j(x)/(n+1.0);
+        th = th + 0.5/(sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel))*(1.0+chi_turb*delta_rel - beta*j(x)/(n+1.0))*(-j(x)/(n+1.0));
+    }
+    else if (pturbrad==2) {
+        th =  -j(x)/(1.0+n);
+    } 
+    else {
+        th =  - j(x)/((1.0+n)*(1.0+delta_rel));
+    }
+    return th;
 }
 
 
@@ -484,30 +532,115 @@ double j(double x) { //% eqn 25b
     return jj;
 }
 
+double djdx(double x) { //% eqn 25b
+    double jj;
+    if (x==0.0) {
+        jj = 0.0;
+    } else if (x<=C) {
+        jj = -1.0/(x*(1.0+x)) + log(1.0+x)/(x*x);
+    } else {
+        jj = (log(1.0+C) - C/(1.0+C))/(x*x);
+    }
+    return jj;
+}
+
+
 double I2(double Cf, double beta) {// % eqn 28a
+    /*
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
     double params[5] = {delta_rel, n, pturbrad, C, beta};
     gsl_function F;
     F.function = &ftx_func;
     F.params = &params;
-    //cout << "In I2: Cf, beta= "<< Cf << " " << beta << endl;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
+    if (Cf<=0) {
+        cout << "Cf error! in I2" << Cf << endl;
+        return 0.0;
+    }
+    gsl_integration_qags (&F, 1e-7, Cf, 0, 1.e-5, 10000, w, &result, &error);
     gsl_integration_workspace_free (w);
     return result;
+    */
+    int nxbins = 1000, i;
+    double *xx, *ftx, result, dlogx;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in I2, Cf=" << Cf << endl;
+        return 0.0;
+    }
+
+    xx = new double [nxbins];
+    ftx = new double [nxbins];
+    // first need to make an array of values
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+
+    for (i=0;i<nxbins;i++) {
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        ftx[i] = f(xx[i])*pow(theta(xx[i], beta),n)*pow(xx[i],2);
+        result += ftx[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete ftx;
+
+    return result;
+
 }
 
-double I2spline(double Cf, double beta) {// % eqn 27 
+double dI2dbeta (double Cf, double beta) {
     int nxbins = 1000, i;
+    double *xx, *ftx, result, dlogx;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in dI2dbeta, Cf=" << Cf << endl;
+        return 0.0;
+    }
+
+    xx = new double [nxbins];
+    ftx = new double [nxbins];
+    // first need to make an array of values
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+
+    for (i=0;i<nxbins;i++) {
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        ftx[i] = n*f(xx[i])*pow(theta(xx[i], beta),n-1.0)*pow(xx[i],2)*dthetadbeta(xx[i], beta);
+        result += ftx[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete ftx;
+
+    return result;
+
+}
+
+double dI2dCf (double Cf, double beta) {
+    double result;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in dI2dCf, Cf=" << Cf << endl;
+        return 0.0;
+    }
+    result = f(Cf)*pow(theta(Cf, beta), n)*Cf*Cf;
+    return result;
+
+}
+
+
+double I2spline(double Cf, double beta) {// % eqn 27 
+    int nxbins = 100, i;
+    if (Cf<=0) { 
+        cout << "Cf error! in I2spline, Cf=" << Cf << endl;
+        return 0.0;
+    }
     gsl_interp_accel *acc = gsl_interp_accel_alloc ();
     gsl_spline *spline = gsl_spline_alloc (gsl_interp_steffen, nxbins);
     double *xx, *ftx, result;
     xx = new double [nxbins];
     ftx = new double [nxbins];
     // first need to make an array of values
-    if (Cf<0) cout << "Cf error! " << Cf << endl;
     for (i=0;i<nxbins;i++) {
-        xx[i] = (double)i * Cf / ((double)(nxbins-1));
+        xx[i] = ((double)i * Cf / ((double)(nxbins-1)));
         ftx[i] = f(xx[i])*pow(theta(xx[i], beta),n)*pow(xx[i],2);
     }
     gsl_spline_init (spline, xx, ftx, nxbins);
@@ -520,6 +653,7 @@ double I2spline(double Cf, double beta) {// % eqn 27
 }
 
 double I3(double Cf, double beta) {// % eqn 28b
+    /*
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
     double params[5] = {delta_rel, n, pturbrad, C, beta};
@@ -527,23 +661,97 @@ double I3(double Cf, double beta) {// % eqn 28b
     F.function = &tx_func;
     F.params = &params;
     //cout << "In I3: Cf, beta= "<< Cf << " " << beta << endl;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
+    if (Cf<=0) {
+        cout << "Cf error! in I3" << Cf << endl;
+        return 0.0;
+    }
+    gsl_integration_qags (&F, 1e-7, Cf, 0, 1.e-5, 10000, w, &result, &error);
     //cout << "I3: " << result << endl;
     gsl_integration_workspace_free (w);
     return result;
-}
+    */
 
-double I3spline(double Cf, double beta) {// % eqn 27 {
-    int nxbins = 100, i;
-    gsl_interp_accel *acc = gsl_interp_accel_alloc ();
-    gsl_spline *spline = gsl_spline_alloc (gsl_interp_steffen, nxbins);
-    double *xx, *tx, result;
+    int nxbins = 1000, i;
+    double *xx, *tx, result, dlogx;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in I3, Cf=" << Cf << endl;
+        return 0.0;
+    }
+
     xx = new double [nxbins];
     tx = new double [nxbins];
     // first need to make an array of values
-    if (Cf<0) cout << "Cf error! " << Cf << endl;
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
     for (i=0;i<nxbins;i++) {
-        xx[i] = (double)i * Cf / ((double)(nxbins-1));
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        tx[i] = pow(theta(xx[i], beta),n+1.0)*pow(xx[i],2);
+        result += tx[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete tx;
+
+    return result;
+}
+
+double dI3dbeta (double Cf, double beta) {
+
+    int nxbins = 1000, i;
+    double *xx, *tx, result, dlogx;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in dI3dbeta, Cf=" << Cf << endl;
+        return 0.0;
+    }
+
+    xx = new double [nxbins];
+    tx = new double [nxbins];
+    // first need to make an array of values
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+    for (i=0;i<nxbins;i++) {
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        tx[i] = (n+1.0)*pow(theta(xx[i], beta),n)*pow(xx[i],2)*dthetadbeta(xx[i],beta);
+        result += tx[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete tx;
+
+    return result;
+}
+
+double dI3dCf (double Cf, double beta) {
+    double result;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in I3, Cf=" << Cf << endl;
+        return 0.0;
+    }
+    result = pow(theta(Cf, beta), n+1.0)*Cf*Cf;
+    return result;
+
+}
+
+double I3spline(double Cf, double beta) {// % eqn 27 {
+
+    int nxbins = 1000, i;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in I3spline, Cf=" << Cf << endl;
+        return 0.0;
+    }
+
+    gsl_interp_accel *acc = gsl_interp_accel_alloc ();
+    gsl_spline *spline = gsl_spline_alloc (gsl_interp_steffen, nxbins);
+    double *xx, *tx, result, dlogx;
+    xx = new double [nxbins];
+    tx = new double [nxbins];
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+    for (i=0;i<nxbins;i++) {
+        //xx[i] = ((double)i * Cf / ((double)(nxbins-1)));
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
         tx[i] = pow(theta(xx[i], beta),n+1.0)*pow(xx[i],2);
     }
     gsl_spline_init (spline, xx, tx, nxbins);
@@ -556,6 +764,7 @@ double I3spline(double Cf, double beta) {// % eqn 27 {
 }
 
 double I3p(double Cf, double beta) {// % eqn 28b
+    /*
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
     double params[5] = {delta_rel, n, pturbrad, C, beta};
@@ -563,29 +772,112 @@ double I3p(double Cf, double beta) {// % eqn 28b
     if ((int)pturbrad==1) F.function = &tx_func_p;
     else F.function = &tx_func;
     F.params = &params;
-    //cout << "In I3p: Cf, beta= "<< Cf << " " << beta << endl;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
+    
+    double lowlim = 1e-7;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in I3p" << Cf << endl;
+        return 0.0;
+    }
+    gsl_integration_qags (&F, 1e-7, Cf, 0, 1.e-5, 10000, w, &result, &error);
     //cout << "I3: " << result << endl;
     gsl_integration_workspace_free (w);
     if ((int)pturbrad==0) result = result*delta_rel*2.0; // check factor of 2!
     else if ((int)pturbrad==2) result = 0.0;
     return result;
+    */
+    int nxbins = 1000, i;
+    double *xx, *tx, result, dlogx;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in I3p, Cf=" << Cf << endl;
+        return 0.0;
+    }
+
+    xx = new double [nxbins];
+    tx = new double [nxbins];
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+
+    for (i=0;i<nxbins;i++) {
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        if (pturbrad==1) tx[i] = delta_rel*pow(theta((xx[i]),beta),n-1.0)*pow((xx[i]),2);
+        else tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
+        result += tx[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete tx;
+
+    return result;
+
 }
+
+double dI3pdbeta (double Cf, double beta) {
+
+    int nxbins = 1000, i;
+    double *xx, *tx, result, dlogx;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in dI3pdbeta, Cf=" << Cf << endl;
+        return 0.0;
+    }
+
+    xx = new double [nxbins];
+    tx = new double [nxbins];
+    // first need to make an array of values
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+    for (i=0;i<nxbins;i++) {
+
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        if (pturbrad==1) {
+            tx[i] = delta_rel*(n-1.0)*pow(theta(xx[i],beta),n-2.0)*pow(xx[i],2)*dthetadbeta(xx[i], beta);
+        }
+        else {
+            tx[i] = (n+1.0)*pow(theta(xx[i], beta),n)*pow(xx[i],2)*dthetadbeta(xx[i],beta);
+        }
+        result += tx[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete tx;
+
+    return result;
+}
+
+double dI3pdCf (double Cf, double beta) {
+    double result;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) {
+        cout << "Cf error! in I3, Cf=" << Cf << endl;
+        return 0.0;
+    }
+    if (pturbrad==1) {
+        result = delta_rel*pow(theta(Cf,beta),n-1.0)*Cf*Cf;
+    } else {
+        result = pow(theta(Cf, beta), n+1.0)*Cf*Cf;
+    }
+    return result;
+}
+
 
 double I3p_spline(double Cf, double beta) {// % eqn 27 {
     // DO NOT USE THIS FOR NOW
-    int nxbins = 100, i;
+    int nxbins = 1000, i;
+
+    if (Cf<=0) {
+        cout << "Cf error! in I3p_spline, Cf=" << Cf << endl;
+        return 0.0;
+    }
     gsl_interp_accel *acc = gsl_interp_accel_alloc ();
     gsl_spline *spline = gsl_spline_alloc (gsl_interp_steffen, nxbins);
     double *xx, *tx, result;
     xx = new double [nxbins];
     tx = new double [nxbins];
     // first need to make an array of values
-    if (Cf<0) cout << "Cf error! " << Cf << endl;
+
     for (i=0;i<nxbins;i++) {
-        xx[i] = (double)i * Cf / ((double)(nxbins-1));
-        if ((int)pturbrad==1) tx[i] = delta_rel*pow(theta(xx[i],beta),n-1.0)*pow(xx[i],2);
-        else tx[i] = pow(theta(xx[i], beta),n+1.0)*pow(xx[i],2);
+        xx[i] = ((double)i * Cf / ((double)(nxbins-1)));
+        if (pturbrad==1) tx[i] = delta_rel*pow(theta((xx[i]),beta),n-1.0)*pow((xx[i]),2);
+        else tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
     }
     gsl_spline_init (spline, xx, tx, nxbins);
     result = gsl_spline_eval_integ (spline, xx[0], xx[nxbins-1], acc);
@@ -596,33 +888,99 @@ double I3p_spline(double Cf, double beta) {// % eqn 27 {
     return result;
 }
 
-
 double L(double Cf, double beta) {// % eqn 27
+    /*
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error, Sx;
     double params[5] = {delta_rel, n, pturbrad, C, beta};
     gsl_function F;
     F.function = &ttx_func;
     F.params = &params;
-    //cout << "In L: Cf, beta= "<< Cf << " " << beta << endl;
-    gsl_integration_qags (&F, 0.0, Cf, 0, 1.e-5, 10000, w, &result, &error);
+    if (Cf<=lowlim) { 
+        cout << "Cf error! in L" << Cf << endl;
+        return 0.0;
+    }
+    gsl_integration_qags (&F, 1e-7, Cf, 0, 1.e-5, 10000, w, &result, &error);
     //cout << "L: " << result << endl;
     gsl_integration_workspace_free (w);
     return result;
+    */
+    int nxbins = 1000, i;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) { 
+        cout << "Cf error! in L, Cf=" << Cf << endl;
+        return 0.0;
+    }
+    double *xx, *ttl, result, dlogx;
+    xx = new double [nxbins];
+    ttl = new double [nxbins];
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+
+    for (i=0;i<nxbins;i++) {
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        ttl[i] =  pow(theta((xx[i]), beta), n)*pow((xx[i]),2);
+        result += ttl[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete ttl;
+
+    return result;
+
 }
 
+double dLdbeta(double Cf, double beta) {// % eqn 27
+    int nxbins = 1000, i;
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) { 
+        cout << "Cf error! in dLdbeta, Cf=" << Cf << endl;
+        return 0.0;
+    }
+    double *xx, *ttl, result, dlogx;
+    xx = new double [nxbins];
+    ttl = new double [nxbins];
+    result = 0.0;
+    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
+
+    for (i=0;i<nxbins;i++) {
+        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
+        ttl[i] =  n*pow(theta(xx[i], beta), n-1.0)*pow(xx[i],2)*dthetadbeta(xx[i],beta);
+        result += ttl[i]*xx[i]*dlogx;
+    }
+    delete xx;
+    delete ttl;
+
+    return result;
+
+}
+
+double dLdCf(double Cf, double beta) {// % eqn 27
+    double lowlim = 1e-30;
+    if (Cf<=lowlim) { 
+        cout << "Cf error! in dLdCf, Cf=" << Cf << endl;
+        return 0.0;
+    }
+    double result;
+    result = pow(theta(Cf, beta), n)*Cf*Cf;
+    return result;
+}
+
+
 double Lspline(double Cf, double beta) {// % eqn 27 {
-    int nxbins = 100, i;
+    int nxbins = 1000, i;
+    if (Cf<=0) {
+        cout << "Cf error! in Lspline, Cf = " << Cf << endl;
+        return 0.0;
+    }
     gsl_interp_accel *acc = gsl_interp_accel_alloc ();
     gsl_spline *spline = gsl_spline_alloc (gsl_interp_steffen, nxbins);
     double *xx, *ttl, result;
     xx = new double [nxbins];
     ttl = new double [nxbins];
     // first need to make an array of values
-    if (Cf<0) cout << "Cf error! " << Cf << endl;
     for (i=0;i<nxbins;i++) {
-        xx[i] = (double)i * Cf / ((double)(nxbins-1));
-        ttl[i] =  pow(theta(xx[i], beta), n)*pow(xx[i],2);
+        xx[i] = ((double)i * Cf / ((double)(nxbins-1)));
+        ttl[i] =  pow(theta((xx[i]), beta), n)*pow((xx[i]),2);
     }
     gsl_spline_init (spline, xx, ttl, nxbins);
     result = gsl_spline_eval_integ (spline, xx[0], xx[nxbins-1], acc);
@@ -639,22 +997,26 @@ double Lvar(double Cf, double beta) {
     gfact = g(pressurebound*C) / g(C);
     if (gfact<1.0) cout << "gfact error" << endl;
     Cfp = Cf;
-    Lc = Lspline(Cf,beta);
+    //Lc = Lspline(Cf,beta);
+    Lc = L(Cf,beta);
     Lp = Lc;
     // do this in three steps to speed it up
     while (Lp < gfact*Lc) {
         Cfp *= 1.2;
-        Lp = Lspline(Cfp,beta);
+        //Lp = Lspline(Cfp,beta);
+        Lp = L(Cfp,beta);
     }
     Cfp  = Cfp / 1.2;
     while (Lp < gfact*Lc) {
         Cfp *= 1.1;
-        Lp = Lspline(Cfp,beta);
+        //Lp = Lspline(Cfp,beta);
+        Lp = L(Cfp,beta);
     }
     Cfp  = Cfp / 1.1;
     while (Lp < gfact*Lc) {
         Cfp *= 1.02;
-        Lp = Lspline(Cfp,beta);
+        //Lp = Lspline(Cfp,beta);
+        Lp = L(Cfp,beta);
     }
     Cfp *= 1.01/1.02; // settle on half way in between
     return Cfp;
@@ -708,7 +1070,7 @@ double setBprime() {
 */
 double energy_constraint(double beta, double Cf) {
 
-    double f, Lval;
+    double val, Lval;
     double Aprime, Bprime;
     double Ks = K_s();
 
@@ -716,41 +1078,205 @@ double energy_constraint(double beta, double Cf) {
     Aprime +=  -1.0*(Gmax()*eps*f_s*pow(clight/vcmax,2)) - (Gmax()*eps_dm*fabs(Edm(0.0))/(mgas*pow(vcmax,2)));
     Bprime = (1.0+f_s)*(S_C(C)/g(C));
 
-    if (Cf<=0.0) Cf = C/10.0; // (C<0) is unphysical
-    f = Aprime + Bprime*(pow(Cf,3) - pow(C,3))/3.0;
-    Lval = Lspline(Cf,beta);
-    f += -1.0*I2(Cf,beta)/Lval + (1.5*(I3spline(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
-    if (f != f ) {
+    if (beta<=0.0) beta = 0.1;
+    if (Cf<=0.0) Cf = C; // (C<0) is unphysical
+
+    val = Aprime + Bprime*(pow(Cf,3) - pow(C,3))/3.0;
+    //Lval = Lspline(Cf,beta);
+    Lval = L(Cf,beta);
+    //val += -1.0*I2(Cf,beta)/Lval + (1.5*(I3spline(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
+    val += -1.0*I2(Cf,beta)/Lval + (1.5*(I3(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
+    if (val != val ) {
         cout << "Energy constraint failed! " << endl;
-        cout << "A, B, Lval =" <<  Aprime  << " " << Bprime << " " << Lval << endl;
+        cout << "  eps, eps_dm, fs_0, fs_alpha = " << eps << " " << eps_dm << " " << fs_0 << " " << fs_alpha << endl;
+        cout << "  beta, Cf, C, xs = " << beta << " " << Cf << " " << C << " " << xs << endl;
+        cout << "  A, B, Lval = " <<  Aprime  << " " << Bprime << " " << Lval << endl;
         //cout << "f_s, Gmax(), K(C), delta_s(), K_s() = " << f_s << " " << Gmax() << " " << K(C) << " " << delta_s() << " " << Ks << endl; 
 
         //cout << "eps, vcmax, eps_dm, |Edm|, mgas =" << eps <<  " " << vcmax << " " << eps_dm << " " << fabs(Edm(0.0)) << " " << mgas << endl;
-        return 100.0;
+        return 0.0;
     }
-    return (f);
+    return (val);
+}
+
+double denergy_constraint_dbeta(double beta, double Cf) {
+
+    double val, Lval, I2val, I3val, I3pval;
+    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
+    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
+
+    if (beta<=0.0) beta = 0.1;
+    if (Cf<=0.0) Cf = C; // (C<0) is unphysical
+
+    Lval = L(Cf,beta);
+    I2val= I2(Cf,beta);
+    I3val = I3(Cf,beta);
+    I3pval = I3p(Cf,beta);
+    dLdbetaval =  dLdbeta(Cf,beta);
+    dI2dbetaval = dI2dbeta(Cf,beta);
+    dI3dbetaval = dI3dbeta(Cf,beta);
+    dI3pdbetaval = dI3pdbeta(Cf,beta);
+
+    //val += -1.0*I2(Cf,beta)/Lval + (1.5*(I3(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
+    val = I2val * dLdbetaval / (Lval*Lval) - dI2dbetaval/Lval 
+        - 1.5*(I3val+I3pval)/(beta*beta*Lval)
+        + 1.5/beta*( - (I3val+I3pval)*dLdbetaval/(Lval*Lval) 
+                     + (dI3dbetaval+dI3pdbetaval)/Lval 
+                   ); 
+
+    if (val != val ) {
+        cout << "dbeta of Energy constraint failed! " << endl;
+        cout << "  eps, eps_dm, fs_0, fs_alpha = " << eps << " " << eps_dm << " " << fs_0 << " " << fs_alpha << endl;
+        cout << "  beta, Cf, C, xs = " << beta << " " << Cf << " " << C << " " << xs << endl;
+        return 0.0;
+    }
+    return (val);
+}
+
+double denergy_constraint_dCf(double beta, double Cf) {
+
+    double val, Lval, I2val, I3val, I3pval;
+    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
+    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
+
+    double Aprime, Bprime;
+
+    Bprime = (1.0+f_s)*(S_C(C)/g(C));
+
+    if (beta<=0.0) beta = 0.1;
+    if (Cf<=0.0) Cf = C; // (C<0) is unphysical
+    val = Bprime*pow(Cf,2);
+ 
+    Lval = L(Cf,beta);
+    I2val= I2(Cf,beta);
+    I3val = I3(Cf,beta);
+    I3pval = I3p(Cf,beta);
+    dLdCfval =  dLdCf(Cf,beta);
+    dI2dCfval = dI2dCf(Cf,beta);
+    dI3dCfval = dI3dCf(Cf,beta);
+    dI3pdCfval = dI3pdCf(Cf,beta);
+
+    //val += -1.0*I2(Cf,beta)/Lval + (1.5*(I3(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
+    val += dLdCfval*I2val/Lval - dI2dCfval/Lval; 
+
+    if (val != val ) {
+        cout << "dCf of Energy constraint failed! " << endl;
+        cout << "  eps, eps_dm, fs_0, fs_alpha = " << eps << " " << eps_dm << " " << fs_0 << " " << fs_alpha << endl;
+        cout << "  beta, Cf, C, xs = " << beta << " " << Cf << " " << C << " " << xs << endl;
+        return 0.0;
+    }
+    return (val);
 }
 
 double pressure_constraint(double beta, double Cf) {
 
-    double f, Cfp;
+    double val, Cfp;
 
     if (beta<=0.0) beta = 0.1;
-    if (Cf<=0.0) Cf = C/10.0;
+    if (Cf<=0.0) Cf = C;
+    //if (beta<=0.0) beta = 1.e-7;
+    //if (Cf<=0.0) Cf = 1.e-7;
 
     Cfp = Lvar(Cf, beta);
-    f = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
-    if ((int)pturbrad==1) f += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
-    else if ((int)pturbrad==2) f += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)));
-    else f += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
-    if (f != f) {
-        return 100.0;
+    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
+    val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*L(Cf,beta),(1.0/(1.0+n)));
+    if (pturbrad==1) val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
+    else if (pturbrad==2) val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/(1.0+n));
+    else val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
+    if (val != val) {
+        return 0.0;
         cout << "Pressure constraint failed! " << endl;
     }
-    return (f);
+    return (val);
 }
 
-int solve_gas_model(bool verbose, double tolerance) {
+double dpressure_constraint_dbeta(double beta, double Cf) {
+
+    double val, Cfp;
+    double Lval, I2val, I3val, I3pval;
+    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
+    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
+
+    Lval = L(Cf,beta);
+    I2val= I2(Cf,beta);
+    I3val = I3(Cf,beta);
+    I3pval = I3p(Cf,beta);
+    dLdbetaval =  dLdbeta(Cf,beta);
+    dI2dbetaval = dI2dbeta(Cf,beta);
+    dI3dbetaval = dI3dbeta(Cf,beta);
+    dI3pdbetaval = dI3pdbeta(Cf,beta);
+
+    if (beta<=0.0) beta = 0.1;
+    if (Cf<=0.0) Cf = C;
+
+    Cfp = Lvar(Cf, beta);
+    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
+    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*L(Cf,beta),(1.0/(1.0+n)));
+    val = (1.0/(1.0+n))*pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lval,(n/(1.0+n)))* (1.0+f_s)*(S_C(C*pressurebound)/g(C))*(dLdbetaval + Lval);
+    if (pturbrad==1) {
+        //val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
+        val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*dthetadbeta(Cfp,beta) + 2.0/(1.0+n)*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),n/(1.0+n))*delta_rel*pow(theta(Cfp, beta),-2.0)*dthetadbeta(Cfp,beta);
+            
+    }
+    else if (pturbrad==2) {
+        //val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)));
+        val += -1.0* pow(1.0,(1.0/(1.0+n)))*(-j(Cfp)/(1.0+n));
+    }
+    else {
+        //val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
+        val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(- j(Cfp)/((1.0+n)*(1.0+delta_rel)));
+    }
+    if (val != val) {
+        return 0.0;
+        cout << "dbeta of Pressure constraint failed! " << endl;
+    }
+    return (val);
+}
+
+double dpressure_constraint_dCf(double beta, double Cf) {
+
+    double val, Cfp;
+    double Lval, I2val, I3val, I3pval;
+    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
+    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
+
+    Lval = L(Cf,beta);
+    I2val= I2(Cf,beta);
+    I3val = I3(Cf,beta);
+    I3pval = I3p(Cf,beta);
+    dLdCfval =  dLdCf(Cf,beta);
+    dI2dCfval = dI2dCf(Cf,beta);
+    dI3dCfval = dI3dCf(Cf,beta);
+    dI3pdCfval = dI3pdCf(Cf,beta);
+
+    if (beta<=0.0) beta = 0.1;
+    if (Cf<=0.0) Cf = C;
+
+    Cfp = Lvar(Cf, beta);
+    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
+    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*L(Cf,beta),(1.0/(1.0+n)));
+    val = (1.0/(1.0+n))*pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lval,(n/(1.0+n)))* (1.0+f_s)*(S_C(C*pressurebound)/g(C))*(dLdCfval + Lval);
+    if (pturbrad==1) {
+        //val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
+        val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*dthetadx(Cfp,beta) + 2.0/(1.0+n)*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2), n/(1.0+n))*delta_rel*pow(theta(Cfp, beta),-2.0)*dthetadx(Cfp,beta);
+            
+    }
+    else if (pturbrad==2) {
+        //val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)));
+        val += -1.0* pow(1.0,(1.0/(1.0+n)))*(-beta*djdx(Cfp)/(1.0+n));
+    }
+    else {
+        //val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
+        val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(- beta*djdx(Cfp)/((1.0+n)*(1.0+delta_rel)));
+    }
+    if (val != val) {
+        return 0.0;
+        cout << "dbeta of Pressure constraint failed! " << endl;
+    }
+    return (val);
+}
+
+int solve_gas_model_hybrid(bool verbose, double tolerance) {
 
     const gsl_multiroot_fsolver_type *T;
     gsl_multiroot_fsolver *s;
@@ -761,17 +1287,17 @@ int solve_gas_model(bool verbose, double tolerance) {
     const size_t ndim = 2;
     int status;
     double size;
-    double p[16] = {delta_rel, n, eps, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n, C, mass, vcmax, ri, mgas, xs, f_s};
+    double p[15] = {delta_rel, n, eps, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n, C, mass, vcmax, ri, mgas, xs, f_s};
 
-    gsl_multiroot_function f = {&gasmod_constraints, ndim, &p};
+    gsl_multiroot_function func = {&gasmod_constraints, ndim, &p};
     /* Starting point */
     v = gsl_vector_alloc (2);
     gsl_vector_set (v, 0, 1.0);
-    gsl_vector_set (v, 1, C/2.0);
+    gsl_vector_set (v, 1, C/10.0);
     /* Initialize method and iterate */
     T = gsl_multiroot_fsolver_hybrids;
     s = gsl_multiroot_fsolver_alloc (T,2);
-    gsl_multiroot_fsolver_set (s, &f, v);
+    gsl_multiroot_fsolver_set (s, &func, v);
 
     do {
         iter++;
@@ -804,19 +1330,75 @@ int solve_gas_model(bool verbose, double tolerance) {
     return status;
 }
 
+int solve_gas_model (bool verbose, double tolerance) {
+
+    const gsl_multiroot_fdfsolver_type *T;
+    gsl_multiroot_fdfsolver *s;
+
+    gsl_vector *v;
+
+    size_t i, iter = 0, max_iter=100;
+    const size_t ndim = 2;
+    int status;
+    double size;
+    double p[15] = {delta_rel, n, eps, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n, C, mass, vcmax, ri, mgas, xs, f_s};
+
+    gsl_multiroot_function_fdf func = {&gasmod_constraints, 
+                                       &gasmod_constraints_df, 
+                                       &gasmod_constraints_fdf, 
+                                        ndim, &p};
+    /* Starting point */
+    v = gsl_vector_alloc (ndim);
+    gsl_vector_set (v, 0, 1.0);
+    gsl_vector_set (v, 1, C);
+    /* Initialize method and iterate */
+    T = gsl_multiroot_fdfsolver_hybridsj;
+    s = gsl_multiroot_fdfsolver_alloc (T,ndim);
+    gsl_multiroot_fdfsolver_set (s, &func, v);
+    do {
+        iter++;
+    	status = gsl_multiroot_fdfsolver_iterate(s);
+    	if (status)
+    	    break;
+    	status = gsl_multiroot_test_residual (s->f, tolerance);
+    	if ((status == GSL_SUCCESS) & verbose) {
+    	    printf ("converged to minimum at\n");
+    	    printf ("Niter= %5d, beta= %10.4e, Cf= %10.4e\n",
+    		    (int)iter,
+    		    gsl_vector_get (s->x, 0),
+    		    gsl_vector_get (s->x, 1));
+    	}
+    } while (status == GSL_CONTINUE && iter < max_iter);
+
+    final_beta = gsl_vector_get (s->x, 0);
+    final_Cf = gsl_vector_get (s->x, 1);
+
+    if (final_Cf < 0 ) {
+        cout << "final Cf < 0! Setting Cf to 1e-7" << endl; 
+        final_Cf = 1.e-7;
+    }
+
+    setp0rho0(verbose);
+    gsl_vector_free(v);
+    gsl_multiroot_fdfsolver_free(s);
+    return status;
+}
+
 void setp0rho0(bool verbose) {
+    if (verbose) cout << "eps, eps_dm, fs_0, fs_alpha = " << eps << " " << eps_dm << " " << fs_0 << " " << fs_alpha << endl;
+    if (verbose) cout << "mass, conc  = " << mass << " " << C << endl;
     if (verbose) {
-        cout << "final_Cf "   << final_Cf << endl;
-        cout << "final_beta " << final_beta << endl;
+        cout << " final_Cf "   << final_Cf << endl;
+        cout << " final_beta " << final_beta << endl;
     }
     rho0 = mgas / (4.0*M_PI*pow(ri*1000/mpc,3)*Lspline(final_Cf, final_beta)); // in Msol/Mpc^3
     p0 = rho0*vcmax*vcmax/(final_beta*Gmax()); // in Msol/Mpc^3 (km/s)^2
     T0 = (mmw*m_p*p0/rho0)*(1000.0/eV); // this is in keV
 
     if (verbose) {
-        cout << "final model solution:" << endl;
-        cout << "P0      " << "rho0       " << "TO  " << endl;
-        cout << p0 << " " << rho0 << " " << T0  << " "<<mgas<<endl;
+        cout << " final model solution:" << endl;
+        cout << " P0      " << "rho0       " << "T0       " << "Mgas" << endl;
+        cout << p0 << " " << rho0 << " " << T0  << " "<< mgas << endl;
     }
 
     p0 = p0*1.0e6*m_sun/(eV*1000.0*pow(mpc,3)); // now in keV/m^3
@@ -1231,16 +1813,12 @@ double return_ngas_mod(double r, double R500, double x_break, double npoly_mod){
     return n_gas;
 }
 
-double return_clumpf ( double r, double R500, double clump0, double x_clump, double alpha_clump1, double alpha_clump2 ) {
+double return_clumpf ( double r, double R200m, double clump0, double alpha_clump, double beta_clump, double gamma_clump ) {
 
-    double clumpf, xb;
-    xb = x_clump * R500;
+    double clumpf;
+    double x = r/R200m;    
 
-    if (r  < xb ) {
-        clumpf = 1. + clump0*pow(r/xb, alpha_clump1) ;
-    } else {
-        clumpf = 1. + clump0*pow(r/xb, alpha_clump1) ;
-    }
+    clumpf = 1. + clump0*pow(x, alpha_clump)*pow(1+pow(x,gamma_clump), (beta_clump-alpha_clump)/(gamma_clump)) ;
     
     return clumpf;
 }
@@ -1568,7 +2146,7 @@ double* calc_ellspace_sz_profile_spline(double rcutoff, double ang_diam_z, doubl
     double result, error, upperlim = rcutoff*C, elli = ang_diam_z/(1000.0*ri/mpc);
     int nxbins = 100, i, j;
     gsl_interp_accel *acc = gsl_interp_accel_alloc ();
-    gsl_spline *spline = gsl_spline_alloc (gsl_interp_steffen, nxbins);
+    gsl_spline *spline = gsl_spline_alloc (gsl_interp_cspline, nxbins);
     double *xx, *yy;
     xx = new double [nxbins];
     yy = new double [nxbins];
@@ -1602,7 +2180,7 @@ double* calc_ellspace_nfw_profile_spline(double ang_diam_z, double redshift, dou
     double Si_result, Ci_result, error, elli = ang_diam_z;
     int nxbins = 1000, i, j;
     gsl_interp_accel *acc = gsl_interp_accel_alloc ();
-    gsl_spline *spline = gsl_spline_alloc (gsl_interp_steffen, nxbins);
+    gsl_spline *spline = gsl_spline_alloc (gsl_interp_cspline, nxbins);
     double *xx, *Si, *Ci;
     xx = new double [nxbins];
     Si = new double [nxbins];

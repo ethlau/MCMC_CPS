@@ -13,15 +13,15 @@ using namespace std;
 
 class cluster {
  protected:
-  float mass, radius, conc, redshift, rho_crit, ri, rhoi, B, C;
-  float overden_id, relation, mass_overden, hubble;
-  float PI, m_sun, G, mpc, gnewt;
+  double mass, radius, conc, redshift, rho_crit, rho_mean, ri, rhoi, B, C;
+  double overden_id, relation, mass_overden, mass_overden_mean, hubble;
+  double PI, m_sun, G, mpc, gnewt;
   bool concset;
   //int relation;
 
  public:
 
-  cluster(float inp1, float inp2, float inp3, float inp4, cosmo & cosm_model) {
+  cluster(double inp1, double inp2, double inp3, double inp4, cosmo & cosm_model) {
     mass = inp1;
     redshift = inp2;
     overden_id = inp3;
@@ -33,16 +33,18 @@ class cluster {
     G = 6.67e-11/1.0e9; // in km^3 kg^-1 s^-2
     mpc = 3.0857e19; // in km
     gnewt = G*m_sun/mpc; //for cosm params (in km^2 Mpc msun^-1 s^-2)
-    if (overden_id==-1) mass_overden =  cosm_model.Delta_vir(redshift);
-	else if (overden_id==-3) mass_overden = 200.0;
-	else if (overden_id==-4) mass_overden =cosm_model.Delta_vir(redshift);
+    if (overden_id==-1) mass_overden =  cosm_model.Delta_vir(redshift); //wrt to critical density
     else mass_overden = overden_id;
+        
+    mass_overden_mean = mass_overden/(cosm_model.Omega_Mz(redshift));
     rho_crit = cosm_model.calc_rho_crit(redshift);
+    rho_mean = cosm_model.calc_rho_mean(redshift);
+
     hubble = cosm_model.get_H0()/100.0;
     calc_radius();
   }
 
-  void reset_cluster(float inp1, float inp2, float inp3, float inp4, cosmo & cosm_model) {
+  void reset_cluster(double inp1, double inp2, double inp3, double inp4, cosmo & cosm_model) {
     mass = inp1;
     redshift = inp2;
     overden_id = inp3;
@@ -51,7 +53,9 @@ class cluster {
     concset = false;
     if (overden_id==-1) mass_overden =  cosm_model.Delta_vir(redshift);
     else mass_overden = overden_id;
+    mass_overden_mean = mass_overden/(cosm_model.Omega_Mz(redshift));
     rho_crit = cosm_model.calc_rho_crit(redshift);
+    rho_mean = cosm_model.calc_rho_mean(redshift);
     hubble = cosm_model.get_H0()/100.0;
     calc_radius();
   }
@@ -61,15 +65,15 @@ class cluster {
     radius = pow(radius, 0.333333);
   }
 
-  float get_radius() {
+  double get_radius() {
     return radius;
   }
 
-  float get_overden(){
+  double get_overden(){
     return mass_overden;
   }
 
-  float get_ri() {
+  double get_ri() {
     if (!concset) {
       cout << "calculate concentration first!" << endl;
       return -1.0;
@@ -80,9 +84,9 @@ class cluster {
     }
   }
 
-  float get_rhoi() {
+  double get_rhoi() {
     // must run concentration first
-    float g;
+    double g;
     if (!concset) {
       cout << "calculate concentration first!" << endl;
       return -1.0;
@@ -95,13 +99,13 @@ class cluster {
     }
   }
 
-  float set_conc(float c) {
+  double set_conc(double c) {
     conc = c;
     concset = true;
     get_ri();
     get_rhoi();
   }
-  float bias(){
+  double bias(){
    if (overden_id == 200) {// Delta = 200
 
 
@@ -120,9 +124,9 @@ class cluster {
       return rho;
   }
 
-  float concentration(float conc_norm, float conc_mass_norm) {
+  double concentration(double conc_norm, double conc_mass_norm) {
     // uses mass, redshift and overdensity as initialised for the cluster
-  float A, Mp;
+  double A, Mp;
     if (overden_id == 200) {// Delta = 200
       if (relation==1) {
 	// mass-concentration relation for c = R200/ri, z = 0
@@ -212,7 +216,7 @@ class cluster {
 
  }
 
-  float get_conc() {
+  double get_conc() {
     if (concset) return conc;
     else {
       cout << "set concentration using method 'cluster::concentration' first " << endl;
@@ -220,18 +224,18 @@ class cluster {
     }
   }
 
-  float get_conc_slope(){
+  double get_conc_slope(){
      if (concset) return B;
   }
 
-float get_conc_z0(){
-  //float con0= conc;
+double get_conc_z0(){
+  //double con0= conc;
   //if (concset)
 
    return conc;
   }
 
-  float get_mass_overden(float overden_to_calc) {
+  double get_mass_overden(double overden_to_calc) {
 
     double A=log(1+conc)- conc/(1+conc);
     double f= overden_to_calc/mass_overden*1.0/pow(conc, 3.0)*A;
@@ -246,11 +250,35 @@ float get_conc_z0(){
 
   }
 
-float get_rad_overden(float overden_to_calc){
-   float massoverden= get_mass_overden(overden_to_calc);
+  double get_mass_overden_mean(double overden_to_calc) { //overden_to_calc here is the overdensity wrt to mean density, not crit density
+
+    double A=log(1+conc)- conc/(1+conc);
+    double f= overden_to_calc/mass_overden_mean*1.0/pow(conc, 3.0)*A;
+    double a1= 0.5116;
+    double a2= -0.4283;
+    double a3= -3.13e-3;
+    double a4= -3.52e-5;
+    double p= a2+a3*log(f)+ a4*pow(log(f), 2.0);
+    double x= pow(a1*pow(f,2.0*p) + pow(0.75, 4.0), -0.5) + 2*f;
+    // cout<<conc<<endl;
+    return mass*overden_to_calc/mass_overden_mean*1.0/pow(conc*x,3);
+
+  }
+
+
+  double get_rad_overden(double overden_to_calc){
+   double massoverden= get_mass_overden(overden_to_calc);
    return pow(massoverden/(4./3.*PI*overden_to_calc*rho_crit) , 1.0/3.0);
 
-}
+  }
+
+  double get_rad_overden_mean(double overden_to_calc){//overden_to_calc here is the overdensity wrt to mean density, not crit density
+
+   double massoverden= get_mass_overden_mean(overden_to_calc);
+   return pow(massoverden/(4./3.*PI*overden_to_calc*rho_crit) , 1.0/3.0);
+
+  }
+
 
 };
 
