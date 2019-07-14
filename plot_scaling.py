@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import xx_power, yy_power
+import xx_power
 import time
 
 keV2erg = 1.6022e-9
@@ -50,12 +50,11 @@ def mgas_m (mass, redshift, theta) :
     n_nt_mod = theta[12]
 
     clump0 = theta[13]
-    clump_zslope = theta[14]
-    x_clump = theta[15]
-    alpha_clump1 = theta[16]
-    alpha_clump2 = theta[17]
+    alpha_clump = theta[14]
+    beta_clump = theta[15]
+    gamma_clump = theta[16]
 
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
 
     mgas = []
     m500 = []
@@ -87,12 +86,12 @@ def tx_m (mass, redshift, theta) :
     n_nt_mod = theta[12]
 
     clump0 = theta[13]
-    clump_zslope = theta[14]
-    x_clump = theta[15]
-    alpha_clump1 = theta[16]
-    alpha_clump2 = theta[17]
+    alpha_clump = theta[14]
+    beta_clump = theta[15]
+    gamma_clump = theta[16]
 
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
+
 
     tx = []
     m500 = []
@@ -125,12 +124,12 @@ def lx_m (mass, redshift, theta) :
     n_nt_mod = theta[12]
 
     clump0 = theta[13]
-    clump_zslope = theta[14]
-    x_clump = theta[15]
-    alpha_clump1 = theta[16]
-    alpha_clump2 = theta[17]
+    alpha_clump = theta[14]
+    beta_clump = theta[15]
+    gamma_clump = theta[16]
 
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
+
 
     lx = []
     m500 = []
@@ -162,13 +161,12 @@ def ysz_m (mass, redshift, theta) :
     n_nt_mod = theta[12]
 
     clump0 = theta[13]
-    clump_zslope = theta[14]
-    x_clump = theta[15]
-    alpha_clump1 = theta[16]
-    alpha_clump2 = theta[17]
+    alpha_clump = theta[14]
+    beta_clump = theta[15]
+    gamma_clump = theta[16]
 
-    yy_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
+
 
     ysz = []
     m500 = []
@@ -203,16 +201,19 @@ def arnaud_ysz_m(m500) :
 
 def mantz_lx_m(m500, z) :
 
+    #Eq 5 from Mantz+16 (https://arxiv.org/abs/1606.03407)
+
     E = np.sqrt(Omega_m*(1.+z)**3+Omega_l)
     m = np.log(m500/1e15)
+    
     beta0 = 1.70
     beta1 = 1.34
     epsilon = np.log(E)
     gamma = -4.2
-
+    
     lx = beta0+ beta1*(epsilon+m) - gamma*np.log(h70)
     lx = np.exp(lx)*E
-
+    
     return lx
 
 def cxb (theta) :
@@ -286,13 +287,13 @@ def main ():
     opt = 1
 
     xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk, opt)
-    yy_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk)
 
     shot_noise = 0.00
 
     ell = 10.**np.linspace(np.log10(10.),np.log10(3.e4),31)
 
-    theta_fid = [4.0, 3.e-5 ,0.04500,0.120000,1.000000,0.180000,0.800000,0.500000,0.100000,1.720000,0.195000,0.010000,0.800000,1.00000,0.730000,1.230000,0.880000, 3.85000]
+    theta_fid = [4.0, 3.e-5 ,0.0500,0.120000,1.000000,0.180000,0.800000,0.500000,0.10000,1.720000,0.195000,0.010000,0.800000, 0.9, 1.0, 6.0, 3.0]
+
 
     param_ind_dict = {'eps_f':0, 'eps_DM':1, 'f_star':2, 'S_star':3, 'A_C':4, 'alpha_nt':5, 'n_nt':6, 'beta_nt':7, 'gamma_mod0':8, 'gamma_mod_zslope':9, 'x_break':10, 'x_smooth':11, 'n_nt_mod':12, 'clump0':13, 'clump_zslope':14, 'x_clump':15, 'alpha_clump1':16, 'alpha_clump2':17}
 
@@ -305,14 +306,15 @@ def main ():
     #params = ['eps_f', 'f_star', 'S_star', 'alpha_nt', 'n_nt', 'beta_nt', 'gamma_mod0', 'gamma_mod_zslope', 'clump0', 'clump_zslope', 'x_clump', 'alpha_clump1', 'alpha_clump2' ]
     params = ['eps_f', 'f_star', 'clump0']
 
-    mvir = 10.**np.linspace(13.0, 16.0, 26)
+    mvir = 10.**np.linspace(14.0, 15.5, 20)
     z = 1e-4
 
-    obs_list = ['mgas', 'lx', 'tx']
+    #obs_list = ['mgas', 'lx', 'tx']
+    obs_list = ['lx']
     #obs_list = ['mgas']
     obs_label= {
         #'lx': r'$L_X(0.15<r/R_{500}<1,z=0)\,{\rm [10^{44}ergs/s]}$',
-        'lx': r'$L_X\,{\rm [10^{44}ergs/s]}$',
+        'lx': r'$L_X(0.5-2.0\,{\rm keV})\,{\rm [10^{44}ergs/s]}$',
         'mgas': r'$M_{\rm gas} (<R_{500}) {[M_\odot]}$',
         'tx': r'$T_X(0.15<r/R_{500}<1,z=0)\,{\rm [keV]}$',
         'ysz': r'$Y_{SZ}(<R_{500},z=0)\,{\rm [Mpc^2] }$'
@@ -333,10 +335,12 @@ def main ():
         param_val_list = []
         color_list = ['C0', 'C1', 'C2', 'C3', 'C4']
        
-        multi_list =  [0.1,0.5,1.0,2.0]
+        #multi_list =  [1.0]
+        multi_list =  [0.5,1.0,2.0]
         #multi_list =  [0.1,0.3,1.0,3.0,10.0]
         if param == 'f_star' :
-            multi_list =  [0.5,0.75,1.0,1.25]
+            #multi_list =  [1.0]
+            multi_list =  [0.5,1.0,2.0]
         for i in multi_list:
 
             param_val = param_fid * i
@@ -358,25 +362,26 @@ def main ():
             if param == 'clump0' :
                 label_str = param_label_dict[param]+r'$= %.1f$'% (param_val+1)
 
+            #label_str = r'model'
             for o in obs_list :
                 ax[o].plot(m500, obs[o], label=label_str)
 
         lx_arnaud = arnaud_lx_m (m500)
         lx_mantz = mantz_lx_m (m500,z)
         ysz_arnaud = arnaud_ysz_m (m500)
-        #ax['lx'].plot(m500, lx_arnaud, color='k', label=r'Arnaud+10')
-        #ax['lx'].plot(m500, lx_mantz, color='k', label=r'Mantz+16')
+        #ax['lx'].plot(m500, lx_arnaud, color='r', label=r'Arnaud+10')
+        ax['lx'].plot(m500, lx_mantz, color='b', label=r'Mantz+16')
         #ax['ysz'].plot(m500, ysz_arnaud, color='k', label=r'Arnaud+10')
 
         for o in obs_list :
             ax[o].set_xlabel(r'$M_{500c}$ [$M_\odot]$')
             ax[o].set_ylabel(obs_label[o])
-            ax[o].legend(loc='lower right')
+            ax[o].legend(loc='best')
             
             ax[o].set_xscale('log')
             ax[o].set_yscale('log')
 
-            outname = param+'_'+o+'_m_z0.pdf'
+            outname = param+'_'+o+'_m_z0.png'
             f[o].savefig(outname)
             f[o].clf()
     

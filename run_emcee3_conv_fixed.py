@@ -70,7 +70,7 @@ w0=-1.000000
 Omega_k=0.000000
 n_s=0.96605
 inputPk="../input_pk/planck_2018_test_matterpower.dat"
-nH = 0.0
+nH = 2.45e21
 opt = 1
 
 xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk, opt)
@@ -104,24 +104,24 @@ def lnlike(theta, x, y, invcov):
     #xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod)
 
     #eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope = theta
-    eps_f, f_star, S_star, clump0, alpha_clump, beta_clump, gamma_clump = theta
+    clump0, alpha_clump, beta_clump, gamma_clump = theta
     
-    #eps_f = 10**eps_f
-    #f_star = 10**f_star
-    #clump0 = 10**clump0
-    #S_star = 10**S_star
-    #alpha_clump = 10**alpha_clump
-    #beta_clump = 10**beta_clump
-    #gamma_clump = 10**gamma_clump
+    eps_f = 3.97
+    f_star = 0.026
+    clump0 = 10**clump0
+    S_star = 0.12
+    alpha_clump = 10**alpha_clump
+    beta_clump = 10**beta_clump
+    gamma_clump = 10**gamma_clump
 
     #fix DM profile
     eps_DM = 3e-5
     A_C = 1.0
 
     #fix non-thermal pressure term
-    A_nt = 0.452
-    B_nt = 0.841
-    gamma_nt = 1.628
+    alpha0 = 0.18
+    n_nt = 0.80
+    beta = 0.50
     x_smooth = 0.01
     n_nt_mod = 0.80
     x_break = 0.195
@@ -137,8 +137,8 @@ def lnlike(theta, x, y, invcov):
     #beta_clump = 6.0
     #gamma_clump = 3.0
 
+    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1.e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump )
 
-    xx_power.set_Flender_params(eps_f*1e-6, eps_DM, f_star, S_star, A_C, A_nt, B_nt, gamma_nt, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
     model = xx_power.return_xx_power_alt(x) # [erg cm^-2 s^-1 str^-1]^2
     #sn = np.full(x.shape, 10.0**log_noise, dtype = np.float64)
     #model += sn
@@ -150,23 +150,15 @@ def lnlike(theta, x, y, invcov):
 
 def lnprior(theta):
 
-    eps_f, f_star, S_star, clump0, alpha_clump, beta_clump, gamma_clump = theta
+    clump0, alpha_clump, beta_clump, gamma_clump = theta
 
     # see https://arxiv.org/pdf/1610.08029.pdf
     #if 0.1 <= eps_f <= 10.0 and 0.0 <= eps_DM <= 0.10 and 0.020 <= f_star <= 0.032 and 0.01 <= S_star <= 1.0 and 0.1 <= A_C <= 3.0 and 0.01 <= gamma_mod0 <= 0.30 and 0.10 <= gamma_mod_zslope <= 3.0 :
 
-
-    #if np.log10(1.09) <= eps_f <= np.log10(8.79) and np.log10(0.023) <= f_star <= np.log10(0.029) and  np.log10(0.02) <= S_star <= np.log10(0.22) and np.log10(0.01) <= clump0 <= np.log10(10.0) and np.log10(0.01) <= alpha_clump <= np.log10(3.0) and np.log10(0.01) <= beta_clump <= np.log10(10.0)and np.log10(0.01) <= gamma_clump <= np.log10(10.0):  
-        #return 0.0 
-    #if not np.log10(0.01) <= clump0 <= np.log10(10.0) and np.log10(0.01) <= alpha_clump <= np.log10(3.0) and np.log10(0.01) <= beta_clump <= np.log10(10.0)and np.log10(0.01) <= gamma_clump <= np.log10(10.0): 
-    if not 0.01 <= clump0 <= 10.0 and 0.01 <= alpha_clump <= 10.0 and 0.01 <= beta_clump <= 10.0 and 0.01 <= gamma_clump <= 10.0: 
-        return -np.inf
-    
-    eps_pr = np.log(1.0/(np.sqrt(2*np.pi)*4.82))-0.5*(eps_f-3.97)**2/4.82**2
-    f_star_pr = np.log(1.0/(np.sqrt(2*np.pi)*0.003))-0.5*(f_star-0.026)**2/0.003**2
-    S_star_pr = np.log(1.0/(np.sqrt(2*np.pi)*0.1))-0.5*(S_star-0.12)**2/0.1**2
-
-    return (eps_pr+ f_star_pr + S_star_pr)
+    #if np.log10(1.09) <= eps_f <= np.log10(8.79) and np.log10(0.023) <= f_star <= np.log10(0.029) and  np.log10(0.02) <= S_star <= np.log10(0.22) and np.log10(0.01) <= clump0 <= np.log10(10.0) and np.log10(0.01) <= alpha_clump <= np.log10(3.0) : 
+    if np.log10(0.01) <= clump0 <= np.log10(10.0) and np.log10(0.01) <= alpha_clump <= np.log10(3.0) and np.log10(0.1) <= beta_clump <= np.log10(10.0)and np.log10(0.01) <= gamma_clump <= np.log10(3.0): 
+        return 0.0 
+    return -np.inf
 
 def lnprob(theta, x, y, invcov):
     lp = lnprior(theta)
@@ -201,7 +193,7 @@ def read_data (filename) :
     return ell, cl, var
 
 if rank == 0 :
-    filename = '../ROSAT/rosat_R4_R7_unabsorbed.txt'
+    filename = '../ROSAT/rosat_R4_R7.txt'
     ell,cl,var = read_data(filename)
 
     icov = np.zeros((var.size,var.size))
@@ -218,8 +210,7 @@ icov = comm.bcast(icov, root = 0)
 
 #initial paramaters for MCMC
 #eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope, log_noise
-#pinit  = np.array([np.log10(3.97), np.log10(0.026), np.log10(0.12), np.log10(1.0), np.log10(1.0), np.log10(3.0), np.log10(3.0)])
-pinit  = np.array([3.97, 0.026, 0.12, 1.0, 1.0, 3.0, 3.0])
+pinit  = np.array([np.log10(1.0), np.log10(1.0),np.log10(6.0),np.log10(3.0)])
 
 ndim = pinit.size
 

@@ -68,9 +68,12 @@ double sinc (double x);
 
 
 struct Flender_param{
-  double alpha0; // fiducial : 0.18
-  double n_nt;   // fiducial : 0.80
-  double beta;   // fiducial : 0.50
+  //double alpha0; // fiducial : 0.18
+  //double n_nt;   // fiducial : 0.80
+  //double beta;   // fiducial : 0.50 
+  double A_nt;
+  double B_nt;
+  double gamma_nt;
   double eps_f;  // fiducial : 3.97e-6
   double eps_DM; // fiducial : 0.00
   double f_star; // fiducial : 0.026
@@ -165,7 +168,7 @@ void init_cosmology(double H0, double Omega_M, double Omega_b, double wt, double
   CP.ns = CP.ns;
   CP.hubble = H0/100.0;
 
-  set_emission_table(opt, nH,"apec_table.dat"); 
+  set_emission_table(opt, nH, "apec_table.dat", "/home/ethlau/programs/pimms4_9a/data/rosat_pspc_r4tor7.area"); 
 
 }
 
@@ -174,14 +177,15 @@ void free_cosmology(){
 }
 
 void set_Flender_params(double p0, double p1, double p2, double p3, double p4, double p5, double p6, double p7, double p8, double p9, double p10, double p11, double p12, double p13, double p14, double p15, double p16) {
-  F.alpha0 =p0;
-  F.n_nt   =p1;
-  F.beta   =p2;
-  F.eps_f  =p3;
-  F.eps_DM =p4;
-  F.f_star =p5;
-  F.S_star =p6;
-  F.A_C    =p7;
+  F.eps_f  =p0;
+  F.eps_DM =p1;
+  F.f_star =p2;
+  F.S_star =p3;
+  F.A_C    =p4;  
+  F.A_nt = p5;
+  F.B_nt = p6;
+  F.gamma_nt =p7;
+
   F.gamma_mod0 =p8;
   F.gamma_mod_zslope =p9;
   F.x_break =p10;
@@ -1004,6 +1008,35 @@ double return_Lx(double z, double Mvir){
   return lum;
 }
 
+double return_flux(double z, double Mvir){
+
+  cosmo cosm_model(CP.H0, CP.Omega_M, CP.Omega_b, CP.Omega_k, CP.wt);
+  
+  std::vector<double> xlist;
+
+  //radius in unit of R500, x = r/R500
+  double xmin = 1e-4;
+  double xmax = 100.0;
+  double x;
+  for(int i=0;i<Nx;i++){
+    x = (log10(xmax)-log10(xmin))/Nx*(double)(1.*i+0.5) + log10(xmin);
+    x = pow(10.0, x);
+    xlist.push_back(x);
+  }
+	  
+  double lum, flux;
+  // lum in ergs/s
+  lum = calc_Flender_xray_luminosity (cosm_model, z, Mvir, xlist);
+  
+  double D_L = cosm_model.lum_dist(z);
+  D_L *= mpc;
+
+  flux = lum/(4.0*M_PI*D_L*D_L);
+
+  return flux;
+}
+
+
 double Mvir_to_Mdeltac(double z, double Mvir, double delta){
 
   double overden_id = -1.0; // 200 for delta=200 rho-c , -1 for delta=vir x rho-c
@@ -1187,6 +1220,7 @@ BOOST_PYTHON_MODULE( xx_power ){
   py::def("return_xx_power_alt", return_xx_power_alt);
   py::def("return_total_xsb", return_total_xsb);
   py::def("return_Lx", return_Lx);
+  py::def("return_flux", return_flux);
   py::def("return_Tx", return_Tx);
   py::def("return_Mgas", return_Mgas);
   py::def("return_pressure_profile", return_pressure_profile);
@@ -1208,7 +1242,8 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, double z, do
     double fs_0 = 0.026; // f_star in arXiv:1706.08972
     double fs_alpha = 0.12; // S_star in arXiv:1706.08972
   */
-  double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  //double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  double A_nt = F.A_nt, B_nt = F.B_nt, gamma_nt = F.gamma_nt;
   double eps_fb = F.eps_f;
   double eps_dm = F.eps_DM;
   double fs_0 = F.f_star;
@@ -1224,7 +1259,7 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, double z, do
   double beta_clump = F.beta_clump;
   double gamma_clump = F.gamma_clump;
 
-  int pturbrad = 2;
+  //int pturbrad = 2;
   bool verbose = false;
   double Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0, M200m, R200m;
   double Omega_M = cosm_model.get_Omega_M();
@@ -1265,13 +1300,15 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, double z, do
   //cout << M500 << " " << R500 << " " << Rvir << endl;
 	
   //gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
-  double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  //double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  double p[8] = {ad_index, eps_fb, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt};
   gas_model icm_mod(p);
 
   icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
-  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+  //icm_mod.evolve_pturb_norm(Redshift, rcutoff);
   icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
   icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.set_R500toR200m(R200m/R500);
   icm_mod.findxs();
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
@@ -1327,7 +1364,8 @@ std::vector<double> calc_Flender_density_profile(cosmo cosm_model, double z, dou
     double fs_0 = 0.026; // f_star in arXiv:1706.08972
     double fs_alpha = 0.12; // S_star in arXiv:1706.08972
   */
-  double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  //double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  double A_nt = F.A_nt, B_nt = F.B_nt, gamma_nt = F.gamma_nt;
   double eps_fb = F.eps_f;
   double eps_dm = F.eps_DM;
   double fs_0 = F.f_star;
@@ -1343,7 +1381,7 @@ std::vector<double> calc_Flender_density_profile(cosmo cosm_model, double z, dou
   double beta_clump = F.beta_clump;
   double gamma_clump = F.gamma_clump;
 
-  int pturbrad = 2;
+  //int pturbrad = 2;
   bool verbose = false;
   double Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0, M200m, R200m;
   double Omega_M = cosm_model.get_Omega_M();
@@ -1382,13 +1420,15 @@ std::vector<double> calc_Flender_density_profile(cosmo cosm_model, double z, dou
 
 
   //gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
-  double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  //double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  double p[8] = {ad_index, eps_fb, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt};
   gas_model icm_mod(p);
 
   icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
-  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+//  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
   icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
   icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.set_R500toR200m(R200m/R500);
   icm_mod.findxs();
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
@@ -1438,7 +1478,8 @@ double calc_Flender_mgas (cosmo cosm_model, double z, double Mvir, std::vector<d
     double fs_0 = 0.026; // f_star in arXiv:1706.08972
     double fs_alpha = 0.12; // S_star in arXiv:1706.08972
   */
-  double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  //double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  double A_nt = F.A_nt, B_nt = F.B_nt, gamma_nt = F.gamma_nt;
   double eps_fb = F.eps_f;
   double eps_dm = F.eps_DM;
   double fs_0 = F.f_star;
@@ -1454,7 +1495,7 @@ double calc_Flender_mgas (cosmo cosm_model, double z, double Mvir, std::vector<d
   double beta_clump = F.beta_clump;
   double gamma_clump = F.gamma_clump;
 
-  int pturbrad = 2;
+  //int pturbrad = 2;
   bool verbose = false;
   double Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0, M200m, R200m;
   double Omega_M = cosm_model.get_Omega_M();
@@ -1487,13 +1528,15 @@ double calc_Flender_mgas (cosmo cosm_model, double z, double Mvir, std::vector<d
   Rvir = nfwclus.get_radius();
 	
   //gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
-  double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  //double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  double p[8] = {ad_index, eps_fb, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt};
   gas_model icm_mod(p);
 
   icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
-  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+//  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
   icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
   icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.set_R500toR200m(R200m/R500);
   icm_mod.findxs();
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
@@ -1561,7 +1604,8 @@ double calc_Flender_xray_temperature (cosmo cosm_model, double z, double Mvir, s
     double fs_0 = 0.026; // f_star in arXiv:1706.08972
     double fs_alpha = 0.12; // S_star in arXiv:1706.08972
   */
-  double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  //double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  double A_nt = F.A_nt, B_nt =F.B_nt, gamma_nt = F.gamma_nt;
   double eps_fb = F.eps_f;
   double eps_dm = F.eps_DM;
   double fs_0 = F.f_star;
@@ -1577,7 +1621,7 @@ double calc_Flender_xray_temperature (cosmo cosm_model, double z, double Mvir, s
   double beta_clump = F.beta_clump;
   double gamma_clump = F.gamma_clump;
 
-  int pturbrad = 2;
+  //int pturbrad = 2;
   bool verbose = false;
   double Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0, M200m, R200m;
   double Omega_M = cosm_model.get_Omega_M();
@@ -1611,13 +1655,15 @@ double calc_Flender_xray_temperature (cosmo cosm_model, double z, double Mvir, s
   Rvir = nfwclus.get_radius();
 	
   //gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
-  double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  //double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  double p[8] = {ad_index, eps_fb, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt};
   gas_model icm_mod(p);
 	
   icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
-  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+//  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
   icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
   icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.set_R500toR200m(R200m/R500);
   icm_mod.findxs();
 	
   icm_mod.solve_gas_model(verbose, 1e-5);
@@ -1697,7 +1743,8 @@ std::vector<double> calc_beta_xray_emissivity_profile(cosmo cosm_model, double z
     double fs_0 = 0.026; // f_star in arXiv:1706.08972
     double fs_alpha = 0.12; // S_star in arXiv:1706.08972
   */
-  double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  //double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  double A_nt = F.A_nt, B_nt = F.B_nt, gamma_nt = F.gamma_nt;
   double eps_fb = F.eps_f;
   double eps_dm = F.eps_DM;
   double fs_0 = F.f_star;
@@ -1713,7 +1760,7 @@ std::vector<double> calc_beta_xray_emissivity_profile(cosmo cosm_model, double z
   double beta_clump = F.beta_clump;
   double gamma_clump = F.gamma_clump;
 
-  int pturbrad = 2;
+  //int pturbrad = 2;
   bool verbose = false;
   double Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0, M200m, R200m;
   double Omega_M = cosm_model.get_Omega_M();
@@ -1756,11 +1803,9 @@ std::vector<double> calc_beta_xray_emissivity_profile(cosmo cosm_model, double z
 
   double fac = 4.0*M_PI*pow(1.0+Redshift, 4.0); // in steradians
   double r, emi, dtemp, dlum;
-  double Tx = 0.0;
-  double Lx = 0.0;
 
-  Tx = 9.48*pow(M500/1e15, 0.75);
-  Lx = 1.12e42/(h*h) * pow(Tx, 3.2) * (1.0+Redshift);
+  double Tx = 9.48*pow(M500/1e15, 0.75);
+  double Lx = 1.12e42/(h*h) * pow(Tx, 3.2) * (1.0+Redshift);
 
   // distances in Mpc
   //double D_A = cosm_model.ang_diam(Redshift);
@@ -1825,7 +1870,8 @@ double calc_Flender_xray_luminosity (cosmo cosm_model, double z, double Mvir, st
     double fs_0 = 0.026; // f_star in arXiv:1706.08972
     double fs_alpha = 0.12; // S_star in arXiv:1706.08972
   */
-  double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  //double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  double A_nt = F.A_nt, B_nt = F.B_nt, gamma_nt = F.gamma_nt;
   double eps_fb = F.eps_f;
   double eps_dm = F.eps_DM;
   double fs_0 = F.f_star;
@@ -1841,8 +1887,7 @@ double calc_Flender_xray_luminosity (cosmo cosm_model, double z, double Mvir, st
   double beta_clump = F.beta_clump;
   double gamma_clump = F.gamma_clump;
 
-
-  int pturbrad = 2;
+  //int pturbrad = 2;
   bool verbose = false;
   double Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0, M200m, R200m;
   double Omega_M = cosm_model.get_Omega_M();
@@ -1874,14 +1919,16 @@ double calc_Flender_xray_luminosity (cosmo cosm_model, double z, double Mvir, st
   M200m = nfwclus.get_mass_overden_mean(200.0);// Msun
   R200m = nfwclus.get_rad_overden_mean(200.0);// (physical) Mpc
 
-  double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  //double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  double p[8] = {ad_index, eps_fb, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt};
   gas_model icm_mod(p);
   //gas_model icm_mod(delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, pturbrad, delta_rel_zslope, delta_rel_n);
 	
   icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
-  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+//  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
   icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
   icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.set_R500toR200m(R200m/R500);
   icm_mod.findxs();
 		
   icm_mod.solve_gas_model(verbose, 1e-5);
@@ -1957,7 +2004,8 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, doubl
     double fs_0 = 0.026; // f_star in arXiv:1706.08972
     double fs_alpha = 0.12; // S_star in arXiv:1706.08972
   */
-  double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  // double delta_rel = F.alpha0, delta_rel_n = F.n_nt, delta_rel_zslope = F.beta;
+  double A_nt = F.A_nt, B_nt = F.B_nt, gamma_nt = F.gamma_nt;
   double eps_fb = F.eps_f;
   double eps_dm = F.eps_DM;
   double fs_0 = F.f_star;
@@ -1973,7 +2021,7 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, doubl
   double beta_clump = F.beta_clump;
   double gamma_clump = F.gamma_clump;
 
-  int pturbrad = 2;
+  //int pturbrad = 2;
   bool verbose = false;
   double Rvir, M500, R500, Rscale, conc, cosmic_t, cosmic_t0, M200m, R200m;
   double Omega_M = cosm_model.get_Omega_M();
@@ -2012,17 +2060,24 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, doubl
   *Rs = Rscale;
 
   //cout << M500 << " " << R500 << " " << Rvir << endl;
+  //assert(F.eps_f > 0);
+  //assert(eps_fb > 0);
 	
-  double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+  //double p[8] = {delta_rel, ad_index, eps_fb, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n};
+
+  double p[8] = {ad_index, eps_fb, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt};
+
   gas_model icm_mod(p);
 	
   icm_mod.calc_fs(M500, Omega_b/Omega_M, cosmic_t0, cosmic_t);
-  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
+//  icm_mod.evolve_pturb_norm(Redshift, rcutoff);
   icm_mod.set_nfw_params(Mvir, Rvir, nfwclus.get_conc(), nfwclus.get_rhoi(), R500);
   icm_mod.set_mgas_init(Omega_b/Omega_M);
+  icm_mod.set_R500toR200m(R200m/R500);
   icm_mod.findxs();
   verbose = false;
   icm_mod.solve_gas_model(verbose, 1e-5);
+  //icm_mod.solve_gas_model_df(verbose, 1e-5);
 
   //double Rmax = icm_mod.thermal_pressure_outer_rad()*R500;
   double Rmax = 3.0*R500;

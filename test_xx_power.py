@@ -154,7 +154,6 @@ def main ():
     #ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', label=r"ROSAT")
 
     cl = power (ell, theta_fid)
-    print(ell, cl)
     nside = 2048
     fwhm = math.radians(12./60.)
     recon_map = hp.sphtfunc.synfast(cl, nside, fwhm=fwhm, pixwin=True, new=True)

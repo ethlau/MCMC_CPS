@@ -13,7 +13,16 @@ ster2sqdeg = 3282.80635
 ster2sqarcmin = ster2sqdeg * 3600.0
 ster2sqarcsec = ster2sqdeg * 3600.0 * 3600.0
 
-efc = 1e-11 # convert cts to erg/cm^2 for ROSAT in [0.5,2.0] keV for T=1e7K N_H=2.5e20 cm^-2
+
+def read_kolodzig (filename = "../Kolodzig/PS_DATA_LSS_RS09_0.5_2.0_NCR03.txt") :
+
+    k, ell, psf, cl, cl_err = np.loadtxt (filename, usecols=(0,1,2,6,7), unpack = True)
+
+    cl *= ster2sqdeg
+    cl_err *= ster2sqdeg
+
+    return  k, ell, psf, cl, cl_err
+
 
 def beam (ell, fwhm=12.0) :
 
@@ -32,9 +41,9 @@ def power (ell, theta, clump=True) :
     S_star = theta[3]
     A_C = theta[4]
 
-    alpha0 = theta[5]
-    n_nt = theta[6]
-    beta = theta[7]
+    A_nt = theta[5]
+    B_nt = theta[6]
+    gamma_nt = theta[7]
 
     gamma_mod0 = theta[8]
     gamma_mod_zslope = theta[9]
@@ -43,12 +52,11 @@ def power (ell, theta, clump=True) :
     n_nt_mod = theta[12]
 
     clump0 = theta[13]
-    clump_zslope = theta[14]
-    x_clump = theta[15]
-    alpha_clump1 = theta[16]
-    alpha_clump2 = theta[17]
+    alpha_clump = theta[14]
+    beta_clump = theta[15]
+    gamma_clump = theta[16]
 
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+    xx_power.set_Flender_params(eps_f*1e-6, eps_DM, f_star, S_star, A_C, A_nt, B_nt, gamma_nt, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
 
     #model = xx_power.return_xx_power(ell) # [erg cm^-2 s^-1 str^-1]^2
     model_alt= xx_power.return_xx_power_alt(ell) # [erg cm^-2 s^-1 str^-1]^2
@@ -63,9 +71,9 @@ def cxb (theta) :
     S_star = theta[3]
     A_C = theta[4]
 
-    alpha0 = theta[5]
-    n_nt = theta[6]
-    beta = theta[7]
+    A_nt = theta[5]
+    B_nt = theta[6]
+    gamma_nt = theta[7]
 
     gamma_mod0 = theta[8]
     gamma_mod_zslope = theta[9]
@@ -74,12 +82,11 @@ def cxb (theta) :
     n_nt_mod = theta[12]
 
     clump0 = theta[13]
-    clump_zslope = theta[14]
-    x_clump = theta[15]
-    alpha_clump1 = theta[16]
-    alpha_clump2 = theta[17]
+    alpha_clump = theta[14]
+    beta_clump = theta[15]
+    gamma_clump = theta[16]
 
-    xx_power.set_Flender_params(alpha0, n_nt, beta, eps_f*1e-6, eps_DM, f_star, S_star, A_C, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, clump_zslope, x_clump, alpha_clump1, alpha_clump2)
+    xx_power.set_Flender_params(eps_f*1e-6, eps_DM, f_star, S_star, A_C, A_nt, B_nt, gamma_nt, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
 
     return (xx_power.return_total_xsb()/(4.0*math.pi))
 
@@ -123,89 +130,91 @@ def main ():
     Omega_k=0.000000
     n_s=0.96605
     inputPk="../input_pk/planck_2018_test_matterpower.dat"
-    nH = 2.4e21
-    opt = 1
+    nH = 0.0
+    opt = 0
 
     xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk, opt)
 
-    shot_noise = 3.0e-21
-
     ell = 10.**np.linspace(np.log10(10.),np.log10(3.e3),31)
 
-    theta_fid = [4.0, 3.e-5 ,0.04500,0.120000,1.000000,0.180000,0.800000,0.500000,0.10000,1.720000,0.195000,0.010000,0.800000,1.00000,0.730000,1.230000,0.880000, 3.85000]
+    theta_fid = [4.0, 3.e-5 ,0.0250,0.120000,1.000000,0.180000,0.800000,0.500000,0.10000,1.720000,0.195000,0.010000,0.800000, 0.2, 1.0, 6.0, 3.0]
 
-    param_ind_dict = {'eps_f':0, 'eps_DM':1, 'f_star':2, 'S_star':3, 'A_C':4, 'alpha_nt':5, 'n_nt':6, 'beta_nt':7, 'gamma_mod0':8, 'gamma_mod_zslope':9, 'x_break':10, 'x_smooth':11, 'n_nt_mod':12, 'clump0':13, 'clump_zslope':14, 'x_clump':15, 'alpha_clump1':16, 'alpha_clump2':17}
+    param_ind_dict = {'eps_f':0, 'eps_DM':1, 'f_star':2, 'S_star':3, 'A_C':4, 'alpha_nt':5, 'n_nt':6, 'beta_nt':7, 'gamma_mod0':8, 'gamma_mod_zslope':9, 'x_break':10, 'x_smooth':11, 'n_nt_mod':12, 'clump0':13, 'alpha_clump':14, 'beta_clump':15, 'gamma_clump':16}
 
-    param_label_dict = {'eps_f':r'$\epsilon_f/10^{-6}$', 'eps_DM':r'$\epsilon_{DM}$', 'f_star':r'$f_\star$', 'S_star':r'$S_\star$', 'A_C':r'$A_C$','alpha_nt':r'$\alpha_{nt}$', 'n_nt':r'$n_{nt}$', 'beta_nt':r'$\beta_{nt}$', 'gamma_mod0':r'$\Gamma_0$', 'gamma_mod_zslope':r'$\beta_\Gamma$', 'n_nt_mod':'$n_{nt,mod}$', 'clump0':r'$C_0$', 'clump_zslope':r'$\beta_C$','x_clump':r'$x_{C}$', 'alpha_clump1':r'$\alpha_{C1}$', 'alpha_clump2':r'$\alpha_{C2}$'}
+    param_label_dict = {'eps_f':r'$\epsilon_f$', 'eps_DM':r'$\epsilon_{DM}$', 'f_star':r'$f_\star$', 'S_star':r'$S_\star$', 'A_C':r'$A_C$','alpha_nt':r'$\alpha_{nt}$', 'n_nt':r'$n_{nt}$', 'beta_nt':r'$\beta_{nt}$', 'gamma_mod0':r'$\Gamma_0$', 'gamma_mod_zslope':r'$\beta_\Gamma$', 'n_nt_mod':'$n_{nt,mod}$', 'clump0':r'$C_0$', 'alpha_clump':r'$\alpha_C$','beta_clump':r'$\beta_{C}$', 'gamma_clump':r'$\gamma_{C}$'}
 
-    rosat_ell, rosat_cl, rosat_var = read_data("../ROSAT/rosat_R4_R7.txt")
+    rosat_ell, rosat_cl, rosat_var = read_data("../ROSAT/rosat_R4_R7_counts.txt")
     rosat_cl *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
-    rosat_cl_err = np.sqrt(rosat_var)*rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
+    rosat_cl_err = np.sqrt(rosat_var)
+    rosat_cl_err *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
+    k_k, ell_k, beam_k, cl_k, cl_k_err = read_kolodzig ()
+    cl_k /= beam_k
+    cl_k *= ell_k*(ell_k+1)/(2.0*math.pi)
+ 
+    #params = [ 'eps_f', 'f_star', 'S_star', 'alpha_nt', 'n_nt', 'beta_nt', 'gamma_mod0', 'gamma_mod_zslope', 'clump0', 'alpha_clump', 'beta_clump', 'gamma_clump' ]
+    #params = [ 'eps_f', 'f_star', 'S_star', 'clump0', 'alpha_clump', 'beta_clump', 'gamma_clump' ]
+    params = [ 'eps_f' ]
+    param_values = {
+        'eps_f':[4.0 ], 
+        #'eps_f':[1.0, 2.0, 4.0, 6.0, 8.0 ], 
+        'f_star':[0.01, 0.015, 0.02, 0.025, 0.03],
+        'S_star':[0.03, 0.06, 0.12, 0.24, 0.48],
+        'clump0':[0.01, 0.1, 1.0, 10.0, 100.0],
+        'alpha_clump':[0.02, 0.05, 1.0, 2.0, 4.0],
+        'beta_clump':[0.02, 0.05, 1.0, 2.0, 4.0],
+        'gamma_clump':[1.0, 2.0, 4.0, 8.0, 16.0]
+    }
 
-    params = [ 'eps_f', 'f_star', 'S_star', 'alpha_nt', 'n_nt', 'beta_nt', 'gamma_mod0', 'gamma_mod_zslope', 'clump0', 'clump_zslope', 'x_clump', 'alpha_clump1', 'alpha_clump2' ]
-
-    #params = ['f_star']
 
     for param in params :
 
         param_ind = param_ind_dict[param]
-        param_fid = theta_fid[param_ind]
-        print(param_fid)
-        param_val_list = []
-        #color_list = ['C0', 'C1', 'C2', 'C3', 'C4']
+        param_val_list = param_values[param]
         color_list = ['C0', 'C1', 'C', 'C3', 'C4']
-       
-        multi_list =  [0.1,0.5,1.0,2.0]
-        if param == 'f_star' :
-            multi_list =  [0.5,0.75,1.0,1.25]
-        for i in multi_list:
-        #for i in [1.0]:
-            param_val = param_fid * i
-            param_val_list.append(param_val)
 
         f = plt.figure( figsize=(4,4) )
         ax = f.add_axes([0.21,0.16,0.75,0.75])
 
-        ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', label=r"ROSAT")
+        ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', fmt='o', label=r"observed", markersize = 5)
 
+        #ax.errorbar(ell_k, cl_k, yerr = cl_k_err, label=r'Kolodzig+18', color='r', fmt='+', markersize=5)
         cl_list = []
-        for counter ,param_val in enumerate(param_val_list) :
+        for counter ,param_val in enumerate(param_values[param]) :
             theta = theta_fid.copy()
             theta[param_ind] = param_val
 
+            print(theta[param_ind])
             start = time.time()
             cl = power (ell, theta)
             end = time.time()
             print("Elapsed time: %s" % (end - start))
-            psn = np.full(ell.shape, shot_noise, dtype = np.float64)
-            cl_total = cl + psn
-            cl_total /= beam(ell)
             cl *= ell*(ell+1)/(2.0*math.pi)
-            psn = psn*ell*(ell+1)/(2.0*math.pi)
-            cl_total *= ell*(ell+1)/(2.0*math.pi)
+            #psn = psn*ell*(ell+1)/(2.0*math.pi)
+            #cl_total *= ell*(ell+1)/(2.0*math.pi)
             cl_list.append(cl)
 
             label_str = param_label_dict[param]+r'$= %.3f $'% (param_val)
-            if param == 'eps_f' :
-                label_str = param_label_dict[param]+r'$= %.1f$'% (param_val)
-            if param == 'clump0' :
-                label_str = param_label_dict[param]+r'$= %.1f$'% (param_val+1)
+            #if param == 'eps_f' :
+            #    label_str = param_label_dict[param]+r'$= %.1f$'% (param_val)
+            #if param == 'clump0' :
+            #    label_str = param_label_dict[param]+r'$= %.1f$'% (param_val+1)
             #ax.plot (ell, cl_total, ls = '-', color=color_list[counter], label=label_str)
             ax.plot (ell, cl, ls = '-', color=color_list[counter], label=label_str)
             #ax.plot (ell, psn, ls = ':', color=color_list[counter])
 
-        ax.set_xlim ( 10, 3e3 )
-        ax.set_ylim ( 1e-19, 1e-14)
-        ax.set_xlabel(r'$\ell$')
+        ax.set_xlim ( 10, 1e4 )
+        #ax.set_ylim ( 1e-19, 1e-14)
+        #ax.set_xlabel(r'$\ell$')
         ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}^{xx}/2\pi\,[{\rm erg^{2}s^{-2}cm^{-4}sr^{-2}}]$')
+        #ax.set_ylabel(r'$C_{\ell}\,[{\rm erg^{2}s^{-2}cm^{-4}sr^{-2}}]$')
         #ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}^{xx}/2\pi\,[{\rm keV^{2}s^{-2}cm^{-4}sr^{-2}}]$')
 
         ax.set_xscale('log')
         ax.set_yscale('log')
-        ax.legend(loc='upper left')
+        ax.legend(loc='upper left', prop={'size': 10})
 
         #outname = '../plots/'+param+'_xx_power.pdf'
-        outname = param+'_xx_power.pdf'
+        outname = param+'_xx_power.png'
         f.savefig(outname)
         f.clf()
     

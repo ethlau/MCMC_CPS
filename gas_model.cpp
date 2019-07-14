@@ -36,7 +36,7 @@ double ttx_func(double x, void * p) {
 
   double *params = (double *)p;
   gas_model gmod;
-  gmod.set_delta_rel(params[0]);
+  gmod.set_A_nt(params[0]);
   gmod.set_n(params[1]);
   gmod.set_C(params[2]);
   double beta = params[3];
@@ -50,7 +50,7 @@ double tx_func(double x, void * p) {
 
   double *params = (double *)p;
   gas_model gmod;
-  gmod.set_delta_rel(params[0]);
+  gmod.set_A_nt(params[0]);
   gmod.set_n(params[1]);
   gmod.set_C(params[2]);
   double beta = params[3];
@@ -64,14 +64,14 @@ double tx_func_p(double x, void * p) {
 
   double *params = (double *)p;
   gas_model gmod;
-  gmod.set_delta_rel(params[0]);
+  gmod.set_A_nt(params[0]);
   gmod.set_n(params[1]);
   gmod.set_C(params[2]);
   double beta = params[3];
-  double delta_rel = params[0];
+  double A_nt = params[0];
   double n = params[1];
 
-  double ff = delta_rel*pow(gmod.theta(x,beta),n-1.0)*pow(x,2);
+  double ff = A_nt*pow(gmod.theta(x,beta),n-1.0)*pow(x,2);
   return ff;
 }
 
@@ -80,11 +80,11 @@ double ftx_func(double x, void * p) {
 
   double *params = (double *)p;
   gas_model gmod;
-  gmod.set_delta_rel(params[0]);
+  gmod.set_A_nt(params[0]);
   gmod.set_n(params[1]);
   gmod.set_C(params[2]);
   double beta = params[3];
-  double delta_rel = params[0];
+  double A_nt = params[0];
   double n = params[1];
 
   double ff = gmod.f(x)*pow(gmod.theta(x, beta),n)*pow(x,2);
@@ -146,7 +146,10 @@ int gasmod_constraints(const gsl_vector *x, void *p, gsl_vector *f) {
   double *params_all = (double *)p;
   double params[8];
   for (int i = 0; i < 8; i ++) params[i] = params_all[i];
+    
+  //double p[15] = {n, eps, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt, C, mass, vcmax, ri, mgas, xs, f_s};
   gas_model gmod(params);
+
   gmod.set_C(params_all[8]);
   gmod.set_mass(params_all[9]);
   gmod.set_vcmax(params_all[10]);
@@ -158,9 +161,9 @@ int gasmod_constraints(const gsl_vector *x, void *p, gsl_vector *f) {
 
   double x0 = gsl_vector_get (x, 0); // beta
   double x1 = gsl_vector_get (x, 1); // Cf
-  //if (x0<0.01) x0 = 0.01;
+  if (x0 < 1e-7) x0 = 100.0;
   //if (x0>14) x0 = 14;
-  //if (x1<0.01) x1 = 0.01;
+  if (x1 < 1e-7) x1 = 100.0;
   //if (x1>14) x1 = 14;
   
   gsl_vector_set (f, 0, gmod.energy_constraint(x0, x1));
@@ -169,47 +172,10 @@ int gasmod_constraints(const gsl_vector *x, void *p, gsl_vector *f) {
   return GSL_SUCCESS;
 }
 
-int gasmod_constraints_df(const gsl_vector *x, void *p, gsl_matrix *J) {
-
-  double *params_all = (double *)p;
-  double params[8];
-  for (int i = 0; i < 8; i ++) params[i] = params_all[i];
-  gas_model gmod(params);
-
-  gmod.set_C(params_all[8]);
-  gmod.set_mass(params_all[9]);
-  gmod.set_vcmax(params_all[10]);
-  gmod.set_mgas(params_all[11]);
-  gmod.set_xs(params_all[12]);
-  gmod.set_f_s(params_all[13]);
-
-  //cout << "in gasmod_constraints: C=" << gmod.get_C() << endl;
-
-  double x0 = gsl_vector_get (x, 0); // beta
-  double x1 = gsl_vector_get (x, 1); // Cf
-
-  //if (x0<0.01) x0 = 0.01;
-  //if (x0>14) x0 = 14;
-  //if (x1<0.01) x1 = 0.01;
-  //if (x1>14) x1 = 14;
-  
-  const double dEdbeta = gmod.denergy_constraint_dbeta(x0, x1);
-  const double dPdbeta = gmod.dpressure_constraint_dbeta(x0, x1);
-  const double dEdCf = gmod.denergy_constraint_dCf(x0, x1);
-  const double dPdCf = gmod.dpressure_constraint_dCf(x0, x1);
-
-  gsl_matrix_set(J, 0, 0, dEdbeta );
-  gsl_matrix_set(J, 0, 1, dEdCf );
-  gsl_matrix_set(J, 1, 0, dPdbeta );
-  gsl_matrix_set(J, 1, 1, dPdCf );
-
-  return GSL_SUCCESS;
-}
 
 int gasmod_constraints_fdf(const gsl_vector *x, void *p, gsl_vector *f, gsl_matrix *J) {
 
   gasmod_constraints (x, p, f);
-  gasmod_constraints_df (x, p, J);
 
   return GSL_SUCCESS;
 }
@@ -234,7 +200,6 @@ double dgxs (double x, void *p) {
   double dy;
 
   dy =  x/((1.+x)*(1.+x));
-  //cout  << "dy = " << dy << endl;
 
   return dy;
 }

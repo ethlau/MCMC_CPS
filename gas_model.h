@@ -23,9 +23,12 @@
 using namespace std;
 
 struct parameters {
-  double alpha0; // fiducial : 0.18
-  double n_nt;   // fiducial : 0.80
-  double beta;   // fiducial : 0.50
+  double A_nt;
+  double B_nt;
+  double gamma_nt;
+  //double alpha0; // fiducial : 0.18
+  //double n_nt;   // fiducial : 0.80
+  //double beta;   // fiducial : 0.50
   double eps_f;  // fiducial : 3.97e-6
   double eps_DM; // fiducial : 0.00
   double f_star; // fiducial : 0.026
@@ -37,10 +40,9 @@ struct parameters {
   double x_smooth; // fiducial : 0.01
   double n_nt_mod; // fiducial : 0.80
   double clump0;
-  double clump_zslope;
-  double x_clump;
-  double alpha_clump1;
-  double alpha_clump2;
+  double alpha_clump;
+  double beta_clump;
+  double gamma_clump;
 };
 
 void set_fiducial_parameters (struct parameters *params);
@@ -125,9 +127,9 @@ class gas_model {
 
     protected:
 
-    double delta_rel, delta_rel_n, n, eps, eps_dm, fs_0, fs_alpha, f_s, Mpiv, chi_turb, delta_rel_zslope;
-    int pturbrad;
-    double C, ri, rhoi, mass, radius, vcmax, mgas, Ytot, pressurebound, R500toRvir;
+    //double delta_rel, delta_rel_n, n, eps, eps_dm, fs_0, fs_alpha, f_s, Mpiv, chi_turb, delta_rel_zslope;
+    double A_nt, B_nt, n, eps, eps_dm, fs_0, fs_alpha, f_s, Mpiv, chi_turb, gamma_nt;
+    double C, ri, rhoi, mass, radius, vcmax, mgas, Ytot, pressurebound, R500toRvir, R500toR200m;
     double xs;
     double final_beta, final_Cf, p0, rho0, T0; // need to define these
     //double Aprime, Bprime;
@@ -137,31 +139,32 @@ class gas_model {
     double *rhogas, *rr, *Tsz, *Ksz, *clumpf;
     int nrads, nell;
 
-    double clump0, alpha_clump1, alpha_clump2, x_clump;
+    double clump0, alpha_clump, beta_clump, gamma_clump;
 
     double m_sun, clight, mpc, G, mu_e, mmw, m_p, eV, sigma_T, m_e, charge, me_csq; 
 
     public:
 
     gas_model() {
-        pturbrad = 2;
         set_constants();
     }
     gas_model(double *p) {
 
-        pturbrad = 2;
-        delta_rel = p[0];
-        n = p[1];
-        eps = p[2];
-        eps_dm = p[3];
-        fs_0 = p[4];
-        fs_alpha = p[5];
-        delta_rel_zslope = p[6];
-        delta_rel_n = p[7];
+        n = p[0];
+        eps = p[1];
+        eps_dm = p[2];
+        fs_0 = p[3];
+        fs_alpha = p[4];
+        //delta_rel_zslope = p[6];
+        //delta_rel_n = p[7];
+        A_nt = p[5];
+        B_nt = p[6];
+        gamma_nt = p[7];
 
         Mpiv = 3.0e14; // in Msol
-        if (pturbrad==1) chi_turb = (n-1.0)/(-1.0*(n+1.0));
-        else chi_turb = 0.0;
+        //if (pturbrad==1) chi_turb = (n-1.0)/(-1.0*(n+1.0));
+        //else 
+        chi_turb = 0.0;
         set_constants();
 
         // stellar evolution parameters (c.f. Nagamine et al. (2006)
@@ -169,8 +172,10 @@ class gas_model {
         bulge_frac = 0.9;
         Tau_d = 4.5;//4.5; // in Gyr
         Tau_b = 1.5;//1.5; // in Gyr
+        //assert(eps > 0);
     }
 
+/*
 void evolve_pturb_norm(double z, double outer_radius) { //compute alpha(z)
     double fmax, evo_power, evo_converge;
     if (delta_rel == 0.0) {
@@ -194,6 +199,7 @@ void evolve_pturb_norm(double z, double outer_radius) { //compute alpha(z)
     }
     //cout << "delta_rel at z = " << delta_rel << endl;
 }
+*/
 
 void set_nfw_params(double bmass, double bradius, double conc, double brhoi, double r500) { // set the NFW parameters
     mass = bmass; // Mvir [Msol]
@@ -249,13 +255,22 @@ void set_mgas(double inp) {
     mgas = inp;
 }
 
-void set_delta_rel(double inp) {
-    delta_rel = inp;
+//void set_delta_rel(double inp) {
+//    delta_rel = inp;
+//}
+
+//void set_delta_rel_n(double inp) {
+//    delta_rel_n = inp;
+//}
+
+void set_A_nt(double inp) {
+    A_nt = inp;
 }
 
-void set_delta_rel_n(double inp) {
-    delta_rel_n = inp;
+void set_B_nt(double inp) {
+    B_nt = inp;
 }
+
 
 void set_n(double inp) {
     n = inp;
@@ -273,6 +288,9 @@ void set_f_s(double inp){
     f_s = inp;
 }
 
+void set_R500toR200m(double inp){
+    R500toR200m = inp;
+}
 
 double get_C(){
     return C;
@@ -282,9 +300,14 @@ double get_n(){
     return n;
 }
 
-double get_delta_rel(){
-    return delta_rel;
+//double get_delta_rel(){
+//    return delta_rel;
+//}
+
+double get_A_nt(){
+    return A_nt;
 }
+
 
 double get_f_s(){
     return f_s;
@@ -295,12 +318,14 @@ void calc_fs(double M500, double baryon_frac_univ, double cosm_t0, double cosm_t
     //---note M500 must be in Msol
 
     f_s = min(fs_0 * pow(M500/Mpiv,-1.0*fs_alpha), 0.8*baryon_frac_univ); //
-    if (f_s < 0) {
+    if (f_s <= 0) {
         cout << f_s << endl;
         cout << fs_0 << " " << M500/Mpiv << " " << fs_alpha << endl;
+        f_s = 1.e-4;
     }
     f_s = f_s / (baryon_frac_univ - f_s); // f_s is now the star formation efficiency
-    assert (f_s >= 0);
+    
+    //assert (f_s >= 0);
     //---uncomment this line for z-evolution:
     //f_s = f_s*calc_fstarz(cosm_t0, cosm_tz);
 
@@ -358,7 +383,7 @@ double findxs() { // solve for x_s (sec 3.1)
     status = gsl_root_fsolver_set (s, &F, x_lo, x_hi);
 
     //printf ("using %s method\n", gsl_root_fsolver_name (s));
-    assert( f_s >= 0);
+    //assert( f_s >= 0);
 
     do {
       iter++;
@@ -458,12 +483,7 @@ double K_s() { // % eqn 21
 
 double theta(double x, double beta) { // % eqn 26b
     double th;
-    if (pturbrad==1) {
-        th = (-1.0*beta*j(x)/(n+1.0) + 1.0 + chi_turb*delta_rel)/2.0;
-        th = th + 0.5*sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel);
-    }
-    else if (pturbrad==2) th = (1.0 - (beta*j(x)/(1.0+n)));
-    else th =  (1.0 - (beta*j(x)/((1.0+n)*(1.0+delta_rel))));
+    th = (1.0 - (beta*j(x)/(1.0+n)));
     return fabs(th);
 }
 
@@ -473,7 +493,6 @@ double theta_mod(double x, double beta, double x_break, double npoly_mod) {
     // x_break is here in units of the NFW scale radius
     // ---
     double th;
-    if (pturbrad!=2){cout<<"ERROR! -- pturbrad should be 2 for computing theta_mod!"; return -1;}
 
     if (x>=x_break){
         th = (1.0 - (beta*j(x)/(1.0+n)));
@@ -484,46 +503,6 @@ double theta_mod(double x, double beta, double x_break, double npoly_mod) {
     return fabs(th);
 }
 
-double dthetadx(double x, double beta) { // % eqn 26b
-    double th;
-    /*
-    if ((pturbrad==1) {
-        th = (-1.0*beta*j(x)/(n+1.0) + 1.0 + chi_turb*delta_rel)/2.0;
-        th = th + 0.5*sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel);
-    }
-    else if (pturbrad==2) th =  (double)(1.0 - (beta*j(x)/(1.0+n)));
-    else th =  (double)(1.0 - (beta*j(x)/((1.0+n)*(1.0+delta_rel))));
-    */
-    if (pturbrad==1) {
-        th = (-1.0*beta*djdx(x)/(n+1.0))/2.0;
-        th = th + 0.5/(sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel))*(1.0+chi_turb*delta_rel - beta*j(x)/(n+1.0))*(-beta*djdx(x)/(n+1.0));
-    }
-    else if (pturbrad==2) {
-        th =  - beta*djdx(x)/(1.0+n);
-    } 
-    else {
-        th =  - beta*djdx(x)/((1.0+n)*(1.0+delta_rel));
-    }
-    return th;
-}
-
-
-double dthetadbeta(double x, double beta) { // % eqn 26b
-    double th;
-    if (pturbrad==1) {
-        th = -0.5*j(x)/(n+1.0);
-        th = th + 0.5/(sqrt(pow(1.0 + chi_turb*delta_rel - beta*j(x)/(n+1.0),2) - 4.0*chi_turb*delta_rel))*(1.0+chi_turb*delta_rel - beta*j(x)/(n+1.0))*(-j(x)/(n+1.0));
-    }
-    else if (pturbrad==2) {
-        th =  -j(x)/(1.0+n);
-    } 
-    else {
-        th =  - j(x)/((1.0+n)*(1.0+delta_rel));
-    }
-    return th;
-}
-
-
 double j(double x) { //% eqn 25b
     double jj;
     if (x==0.0) jj = 0.0;
@@ -531,19 +510,6 @@ double j(double x) { //% eqn 25b
     else jj = 1.0 - 1.0/(1.0+C) - (log(1.0+C) - C/(1.0+C))/x;
     return jj;
 }
-
-double djdx(double x) { //% eqn 25b
-    double jj;
-    if (x==0.0) {
-        jj = 0.0;
-    } else if (x<=C) {
-        jj = -1.0/(x*(1.0+x)) + log(1.0+x)/(x*x);
-    } else {
-        jj = (log(1.0+C) - C/(1.0+C))/(x*x);
-    }
-    return jj;
-}
-
 
 double I2(double Cf, double beta) {// % eqn 28a
     /*
@@ -586,46 +552,6 @@ double I2(double Cf, double beta) {// % eqn 28a
     return result;
 
 }
-
-double dI2dbeta (double Cf, double beta) {
-    int nxbins = 1000, i;
-    double *xx, *ftx, result, dlogx;
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) {
-        cout << "Cf error! in dI2dbeta, Cf=" << Cf << endl;
-        return 0.0;
-    }
-
-    xx = new double [nxbins];
-    ftx = new double [nxbins];
-    // first need to make an array of values
-    result = 0.0;
-    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
-
-    for (i=0;i<nxbins;i++) {
-        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
-        ftx[i] = n*f(xx[i])*pow(theta(xx[i], beta),n-1.0)*pow(xx[i],2)*dthetadbeta(xx[i], beta);
-        result += ftx[i]*xx[i]*dlogx;
-    }
-    delete xx;
-    delete ftx;
-
-    return result;
-
-}
-
-double dI2dCf (double Cf, double beta) {
-    double result;
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) {
-        cout << "Cf error! in dI2dCf, Cf=" << Cf << endl;
-        return 0.0;
-    }
-    result = f(Cf)*pow(theta(Cf, beta), n)*Cf*Cf;
-    return result;
-
-}
-
 
 double I2spline(double Cf, double beta) {// % eqn 27 
     int nxbins = 100, i;
@@ -695,43 +621,6 @@ double I3(double Cf, double beta) {// % eqn 28b
     return result;
 }
 
-double dI3dbeta (double Cf, double beta) {
-
-    int nxbins = 1000, i;
-    double *xx, *tx, result, dlogx;
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) {
-        cout << "Cf error! in dI3dbeta, Cf=" << Cf << endl;
-        return 0.0;
-    }
-
-    xx = new double [nxbins];
-    tx = new double [nxbins];
-    // first need to make an array of values
-    result = 0.0;
-    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
-    for (i=0;i<nxbins;i++) {
-        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
-        tx[i] = (n+1.0)*pow(theta(xx[i], beta),n)*pow(xx[i],2)*dthetadbeta(xx[i],beta);
-        result += tx[i]*xx[i]*dlogx;
-    }
-    delete xx;
-    delete tx;
-
-    return result;
-}
-
-double dI3dCf (double Cf, double beta) {
-    double result;
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) {
-        cout << "Cf error! in I3, Cf=" << Cf << endl;
-        return 0.0;
-    }
-    result = pow(theta(Cf, beta), n+1.0)*Cf*Cf;
-    return result;
-
-}
 
 double I3spline(double Cf, double beta) {// % eqn 27 {
 
@@ -800,8 +689,9 @@ double I3p(double Cf, double beta) {// % eqn 28b
 
     for (i=0;i<nxbins;i++) {
         xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
-        if (pturbrad==1) tx[i] = delta_rel*pow(theta((xx[i]),beta),n-1.0)*pow((xx[i]),2);
-        else tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
+        //if (pturbrad==1) tx[i] = delta_rel*pow(theta((xx[i]),beta),n-1.0)*pow((xx[i]),2);
+        //else tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
+        tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
         result += tx[i]*xx[i]*dlogx;
     }
     delete xx;
@@ -809,53 +699,6 @@ double I3p(double Cf, double beta) {// % eqn 28b
 
     return result;
 
-}
-
-double dI3pdbeta (double Cf, double beta) {
-
-    int nxbins = 1000, i;
-    double *xx, *tx, result, dlogx;
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) {
-        cout << "Cf error! in dI3pdbeta, Cf=" << Cf << endl;
-        return 0.0;
-    }
-
-    xx = new double [nxbins];
-    tx = new double [nxbins];
-    // first need to make an array of values
-    result = 0.0;
-    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
-    for (i=0;i<nxbins;i++) {
-
-        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
-        if (pturbrad==1) {
-            tx[i] = delta_rel*(n-1.0)*pow(theta(xx[i],beta),n-2.0)*pow(xx[i],2)*dthetadbeta(xx[i], beta);
-        }
-        else {
-            tx[i] = (n+1.0)*pow(theta(xx[i], beta),n)*pow(xx[i],2)*dthetadbeta(xx[i],beta);
-        }
-        result += tx[i]*xx[i]*dlogx;
-    }
-    delete xx;
-    delete tx;
-
-    return result;
-}
-
-double dI3pdCf (double Cf, double beta) {
-    double result;
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) {
-        cout << "Cf error! in I3, Cf=" << Cf << endl;
-        return 0.0;
-    }
-    if (pturbrad==1) {
-        result = delta_rel*pow(theta(Cf,beta),n-1.0)*Cf*Cf;
-    } else {
-        result = pow(theta(Cf, beta), n+1.0)*Cf*Cf;
-    }
-    return result;
 }
 
 
@@ -876,8 +719,9 @@ double I3p_spline(double Cf, double beta) {// % eqn 27 {
 
     for (i=0;i<nxbins;i++) {
         xx[i] = ((double)i * Cf / ((double)(nxbins-1)));
-        if (pturbrad==1) tx[i] = delta_rel*pow(theta((xx[i]),beta),n-1.0)*pow((xx[i]),2);
-        else tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
+        //if (pturbrad==1) tx[i] = delta_rel*pow(theta((xx[i]),beta),n-1.0)*pow((xx[i]),2);
+        //else tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
+        tx[i] = pow(theta((xx[i]), beta),n+1.0)*pow((xx[i]),2);
     }
     gsl_spline_init (spline, xx, tx, nxbins);
     result = gsl_spline_eval_integ (spline, xx[0], xx[nxbins-1], acc);
@@ -928,43 +772,6 @@ double L(double Cf, double beta) {// % eqn 27
     return result;
 
 }
-
-double dLdbeta(double Cf, double beta) {// % eqn 27
-    int nxbins = 1000, i;
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) { 
-        cout << "Cf error! in dLdbeta, Cf=" << Cf << endl;
-        return 0.0;
-    }
-    double *xx, *ttl, result, dlogx;
-    xx = new double [nxbins];
-    ttl = new double [nxbins];
-    result = 0.0;
-    dlogx = (log10(Cf)-log10(lowlim))/((double)(nxbins-1));
-
-    for (i=0;i<nxbins;i++) {
-        xx[i] = pow(10.0, log10(lowlim) + (double)i * dlogx);
-        ttl[i] =  n*pow(theta(xx[i], beta), n-1.0)*pow(xx[i],2)*dthetadbeta(xx[i],beta);
-        result += ttl[i]*xx[i]*dlogx;
-    }
-    delete xx;
-    delete ttl;
-
-    return result;
-
-}
-
-double dLdCf(double Cf, double beta) {// % eqn 27
-    double lowlim = 1e-30;
-    if (Cf<=lowlim) { 
-        cout << "Cf error! in dLdCf, Cf=" << Cf << endl;
-        return 0.0;
-    }
-    double result;
-    result = pow(theta(Cf, beta), n)*Cf*Cf;
-    return result;
-}
-
 
 double Lspline(double Cf, double beta) {// % eqn 27 {
     int nxbins = 1000, i;
@@ -1078,8 +885,8 @@ double energy_constraint(double beta, double Cf) {
     Aprime +=  -1.0*(Gmax()*eps*f_s*pow(clight/vcmax,2)) - (Gmax()*eps_dm*fabs(Edm(0.0))/(mgas*pow(vcmax,2)));
     Bprime = (1.0+f_s)*(S_C(C)/g(C));
 
-    if (beta<=0.0) beta = 0.1;
-    if (Cf<=0.0) Cf = C; // (C<0) is unphysical
+    if (beta<=0.0 || beta != beta) beta = 0.1;
+    if (Cf<=0.0 || Cf != Cf ) Cf = C; // (C<0) is unphysical
 
     val = Aprime + Bprime*(pow(Cf,3) - pow(C,3))/3.0;
     //Lval = Lspline(Cf,beta);
@@ -1099,75 +906,6 @@ double energy_constraint(double beta, double Cf) {
     return (val);
 }
 
-double denergy_constraint_dbeta(double beta, double Cf) {
-
-    double val, Lval, I2val, I3val, I3pval;
-    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
-    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
-
-    if (beta<=0.0) beta = 0.1;
-    if (Cf<=0.0) Cf = C; // (C<0) is unphysical
-
-    Lval = L(Cf,beta);
-    I2val= I2(Cf,beta);
-    I3val = I3(Cf,beta);
-    I3pval = I3p(Cf,beta);
-    dLdbetaval =  dLdbeta(Cf,beta);
-    dI2dbetaval = dI2dbeta(Cf,beta);
-    dI3dbetaval = dI3dbeta(Cf,beta);
-    dI3pdbetaval = dI3pdbeta(Cf,beta);
-
-    //val += -1.0*I2(Cf,beta)/Lval + (1.5*(I3(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
-    val = I2val * dLdbetaval / (Lval*Lval) - dI2dbetaval/Lval 
-        - 1.5*(I3val+I3pval)/(beta*beta*Lval)
-        + 1.5/beta*( - (I3val+I3pval)*dLdbetaval/(Lval*Lval) 
-                     + (dI3dbetaval+dI3pdbetaval)/Lval 
-                   ); 
-
-    if (val != val ) {
-        cout << "dbeta of Energy constraint failed! " << endl;
-        cout << "  eps, eps_dm, fs_0, fs_alpha = " << eps << " " << eps_dm << " " << fs_0 << " " << fs_alpha << endl;
-        cout << "  beta, Cf, C, xs = " << beta << " " << Cf << " " << C << " " << xs << endl;
-        return 0.0;
-    }
-    return (val);
-}
-
-double denergy_constraint_dCf(double beta, double Cf) {
-
-    double val, Lval, I2val, I3val, I3pval;
-    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
-    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
-
-    double Aprime, Bprime;
-
-    Bprime = (1.0+f_s)*(S_C(C)/g(C));
-
-    if (beta<=0.0) beta = 0.1;
-    if (Cf<=0.0) Cf = C; // (C<0) is unphysical
-    val = Bprime*pow(Cf,2);
- 
-    Lval = L(Cf,beta);
-    I2val= I2(Cf,beta);
-    I3val = I3(Cf,beta);
-    I3pval = I3p(Cf,beta);
-    dLdCfval =  dLdCf(Cf,beta);
-    dI2dCfval = dI2dCf(Cf,beta);
-    dI3dCfval = dI3dCf(Cf,beta);
-    dI3pdCfval = dI3pdCf(Cf,beta);
-
-    //val += -1.0*I2(Cf,beta)/Lval + (1.5*(I3(Cf,beta) + I3p(Cf,beta))/(beta*Lval));
-    val += dLdCfval*I2val/Lval - dI2dCfval/Lval; 
-
-    if (val != val ) {
-        cout << "dCf of Energy constraint failed! " << endl;
-        cout << "  eps, eps_dm, fs_0, fs_alpha = " << eps << " " << eps_dm << " " << fs_0 << " " << fs_alpha << endl;
-        cout << "  beta, Cf, C, xs = " << beta << " " << Cf << " " << C << " " << xs << endl;
-        return 0.0;
-    }
-    return (val);
-}
-
 double pressure_constraint(double beta, double Cf) {
 
     double val, Cfp;
@@ -1180,9 +918,10 @@ double pressure_constraint(double beta, double Cf) {
     Cfp = Lvar(Cf, beta);
     //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
     val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*L(Cf,beta),(1.0/(1.0+n)));
-    if (pturbrad==1) val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
-    else if (pturbrad==2) val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/(1.0+n));
-    else val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
+    //if (pturbrad==1) val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
+    //else if (pturbrad==2) val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/(1.0+n));
+    //else val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
+    val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/(1.0+n));
     if (val != val) {
         return 0.0;
         cout << "Pressure constraint failed! " << endl;
@@ -1190,93 +929,7 @@ double pressure_constraint(double beta, double Cf) {
     return (val);
 }
 
-double dpressure_constraint_dbeta(double beta, double Cf) {
-
-    double val, Cfp;
-    double Lval, I2val, I3val, I3pval;
-    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
-    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
-
-    Lval = L(Cf,beta);
-    I2val= I2(Cf,beta);
-    I3val = I3(Cf,beta);
-    I3pval = I3p(Cf,beta);
-    dLdbetaval =  dLdbeta(Cf,beta);
-    dI2dbetaval = dI2dbeta(Cf,beta);
-    dI3dbetaval = dI3dbeta(Cf,beta);
-    dI3pdbetaval = dI3pdbeta(Cf,beta);
-
-    if (beta<=0.0) beta = 0.1;
-    if (Cf<=0.0) Cf = C;
-
-    Cfp = Lvar(Cf, beta);
-    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
-    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*L(Cf,beta),(1.0/(1.0+n)));
-    val = (1.0/(1.0+n))*pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lval,(n/(1.0+n)))* (1.0+f_s)*(S_C(C*pressurebound)/g(C))*(dLdbetaval + Lval);
-    if (pturbrad==1) {
-        //val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
-        val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*dthetadbeta(Cfp,beta) + 2.0/(1.0+n)*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),n/(1.0+n))*delta_rel*pow(theta(Cfp, beta),-2.0)*dthetadbeta(Cfp,beta);
-            
-    }
-    else if (pturbrad==2) {
-        //val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)));
-        val += -1.0* pow(1.0,(1.0/(1.0+n)))*(-j(Cfp)/(1.0+n));
-    }
-    else {
-        //val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
-        val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(- j(Cfp)/((1.0+n)*(1.0+delta_rel)));
-    }
-    if (val != val) {
-        return 0.0;
-        cout << "dbeta of Pressure constraint failed! " << endl;
-    }
-    return (val);
-}
-
-double dpressure_constraint_dCf(double beta, double Cf) {
-
-    double val, Cfp;
-    double Lval, I2val, I3val, I3pval;
-    double dLdbetaval, dI2dbetaval, dI3dbetaval, dI3pdbetaval;
-    double dLdCfval, dI2dCfval, dI3dCfval, dI3pdCfval;
-
-    Lval = L(Cf,beta);
-    I2val= I2(Cf,beta);
-    I3val = I3(Cf,beta);
-    I3pval = I3p(Cf,beta);
-    dLdCfval =  dLdCf(Cf,beta);
-    dI2dCfval = dI2dCf(Cf,beta);
-    dI3dCfval = dI3dCf(Cf,beta);
-    dI3pdCfval = dI3pdCf(Cf,beta);
-
-    if (beta<=0.0) beta = 0.1;
-    if (Cf<=0.0) Cf = C;
-
-    Cfp = Lvar(Cf, beta);
-    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lspline(Cf,beta),(1.0/(1.0+n)));
-    //val = pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*L(Cf,beta),(1.0/(1.0+n)));
-    val = (1.0/(1.0+n))*pow((1.0+f_s)*(S_C(C*pressurebound)/g(C))*beta*Lval,(n/(1.0+n)))* (1.0+f_s)*(S_C(C*pressurebound)/g(C))*(dLdCfval + Lval);
-    if (pturbrad==1) {
-        //val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*theta(Cfp,beta);
-        val += -1.0*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2),1.0/(1.0+n))*dthetadx(Cfp,beta) + 2.0/(1.0+n)*pow(1.0 + delta_rel*pow(theta(Cfp,beta),-2), n/(1.0+n))*delta_rel*pow(theta(Cfp, beta),-2.0)*dthetadx(Cfp,beta);
-            
-    }
-    else if (pturbrad==2) {
-        //val += -1.0* pow(1.0,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)));
-        val += -1.0* pow(1.0,(1.0/(1.0+n)))*(-beta*djdx(Cfp)/(1.0+n));
-    }
-    else {
-        //val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(1.0 - beta*j(Cfp)/((1.0+n)*(1.0+delta_rel)));
-        val += -1.0* pow(1.0+delta_rel,(1.0/(1.0+n)))*(- beta*djdx(Cfp)/((1.0+n)*(1.0+delta_rel)));
-    }
-    if (val != val) {
-        return 0.0;
-        cout << "dbeta of Pressure constraint failed! " << endl;
-    }
-    return (val);
-}
-
-int solve_gas_model_hybrid(bool verbose, double tolerance) {
+int solve_gas_model (bool verbose, double tolerance) {
 
     const gsl_multiroot_fsolver_type *T;
     gsl_multiroot_fsolver *s;
@@ -1287,13 +940,15 @@ int solve_gas_model_hybrid(bool verbose, double tolerance) {
     const size_t ndim = 2;
     int status;
     double size;
-    double p[15] = {delta_rel, n, eps, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n, C, mass, vcmax, ri, mgas, xs, f_s};
+    double p[15] = {n, eps, eps_dm, fs_0, fs_alpha, A_nt, B_nt, gamma_nt, C, mass, vcmax, ri, mgas, xs, f_s};
+
+    //assert(eps > 0);
 
     gsl_multiroot_function func = {&gasmod_constraints, ndim, &p};
     /* Starting point */
     v = gsl_vector_alloc (2);
     gsl_vector_set (v, 0, 1.0);
-    gsl_vector_set (v, 1, C/10.0);
+    gsl_vector_set (v, 1, 10*C);
     /* Initialize method and iterate */
     T = gsl_multiroot_fsolver_hybrids;
     s = gsl_multiroot_fsolver_alloc (T,2);
@@ -1318,8 +973,8 @@ int solve_gas_model_hybrid(bool verbose, double tolerance) {
     final_Cf = gsl_vector_get (s->x, 1);
 
     if (final_Cf < 0 ) {
-        cout << "final Cf < 0! Setting Cf to 1e-7" << endl; 
-        final_Cf = 1.e-7;
+        cout << "final Cf < 0! Setting Cf to C/10" << endl; 
+        final_Cf = C/10.;
         setp0rho0(true);
     } else {
         setp0rho0(verbose);
@@ -1330,61 +985,8 @@ int solve_gas_model_hybrid(bool verbose, double tolerance) {
     return status;
 }
 
-int solve_gas_model (bool verbose, double tolerance) {
-
-    const gsl_multiroot_fdfsolver_type *T;
-    gsl_multiroot_fdfsolver *s;
-
-    gsl_vector *v;
-
-    size_t i, iter = 0, max_iter=100;
-    const size_t ndim = 2;
-    int status;
-    double size;
-    double p[15] = {delta_rel, n, eps, eps_dm, fs_0, fs_alpha, delta_rel_zslope, delta_rel_n, C, mass, vcmax, ri, mgas, xs, f_s};
-
-    gsl_multiroot_function_fdf func = {&gasmod_constraints, 
-                                       &gasmod_constraints_df, 
-                                       &gasmod_constraints_fdf, 
-                                        ndim, &p};
-    /* Starting point */
-    v = gsl_vector_alloc (ndim);
-    gsl_vector_set (v, 0, 1.0);
-    gsl_vector_set (v, 1, C);
-    /* Initialize method and iterate */
-    T = gsl_multiroot_fdfsolver_hybridsj;
-    s = gsl_multiroot_fdfsolver_alloc (T,ndim);
-    gsl_multiroot_fdfsolver_set (s, &func, v);
-    do {
-        iter++;
-    	status = gsl_multiroot_fdfsolver_iterate(s);
-    	if (status)
-    	    break;
-    	status = gsl_multiroot_test_residual (s->f, tolerance);
-    	if ((status == GSL_SUCCESS) & verbose) {
-    	    printf ("converged to minimum at\n");
-    	    printf ("Niter= %5d, beta= %10.4e, Cf= %10.4e\n",
-    		    (int)iter,
-    		    gsl_vector_get (s->x, 0),
-    		    gsl_vector_get (s->x, 1));
-    	}
-    } while (status == GSL_CONTINUE && iter < max_iter);
-
-    final_beta = gsl_vector_get (s->x, 0);
-    final_Cf = gsl_vector_get (s->x, 1);
-
-    if (final_Cf < 0 ) {
-        cout << "final Cf < 0! Setting Cf to 1e-7" << endl; 
-        final_Cf = 1.e-7;
-    }
-
-    setp0rho0(verbose);
-    gsl_vector_free(v);
-    gsl_multiroot_fdfsolver_free(s);
-    return status;
-}
-
 void setp0rho0(bool verbose) {
+
     if (verbose) cout << "eps, eps_dm, fs_0, fs_alpha = " << eps << " " << eps_dm << " " << fs_0 << " " << fs_alpha << endl;
     if (verbose) cout << "mass, conc  = " << mass << " " << C << endl;
     if (verbose) {
@@ -1477,7 +1079,7 @@ double* get_ysz() {
     return &ysz[0];
 }
 
-double*  get_k(){  return &k[0];}
+double* get_k(){  return &k[0];}
 double* get_x() {  return (double*)&x[0];}
 double* get_P() {  return &ysz[0]; }
 double* get_T(){ return &Tsz[0];}
@@ -1485,30 +1087,6 @@ double* get_rhogas(){ return &rhogas[0];}
 double* get_K() {  return &Ksz[0]; }
 double* get_xx(){ return &rr[0]; }
 double* get_clumpf(){ return &clumpf[0]; }
-
-double* calc_3d_sz_profile(double R500) {
-    double units = mpc*sigma_T/me_csq;
-    double xx;
-    int i;
-    for (i=0;i<nrads;i++) {
-        xx = (double)x[i]/(1000.0*ri/mpc); // need to sort out the stupid units on ri
-        ysz[i] =  (double)units*p0*pow(theta(xx,final_beta),(n+1.0))/mu_e; // should the mu_e be here?
-        if ((int)pturbrad==2) ysz[i] = ysz[i]*(1.0 - delta_rel*pow(x[i]*(1000.0*ri/mpc) / R500, delta_rel_n));
-    }
-    return &ysz[0];
-}
-
-double* calc_electron_pressure_profile(double R500) {
-    double xx;
-    int i;
-    for (i=0;i<nrads;i++) {
-        xx = (double)x[i]/(1000.0*ri/mpc); // need to sort out the stupid units on ri
-        ysz[i] =  (double)mmw*p0*pow(theta(xx,final_beta),(n+1.0))/mu_e;
-        if ((int)pturbrad==2) ysz[i] = ysz[i]*(1.0 - delta_rel*pow(x[i]*(1000.0*ri/mpc) / R500, delta_rel_n));
-    }
-    return &ysz[0];
-}
-
 
 /* Pressure profile from Arnaud et al. (2010) */
 double calc_pressure_Arnaud(double r, double r500, double h, double E){
@@ -1552,6 +1130,15 @@ double calc_pressure_Arnaud(double r, double r500, double h, double E){
   return P;
 }
 
+double pntfrac ( double r, double R500 ) {
+
+    double fnt;
+    double R200m = R500/R500toR200m;
+    fnt = 1.0 - A_nt * (1.0 + exp( -pow(r/(R200m*B_nt),gamma_nt) ) );
+    return fnt;
+
+}
+
 double calc_gas_density(double r, double R500){
   double xx, rhogas;
 
@@ -1566,10 +1153,11 @@ Note that the unit does not include hubble parameter (h).
 */
 double calc_gas_pressure(double r, double R500){
     double xx, ngas, T, Pgas;
-
+    double fnt;
     xx = r/(1000.0*ri/mpc);
     ngas = rho0*pow(theta(xx,final_beta), n)/m_p/mmw/pow(mpc,3)/1.e6*m_sun; // cm^-3
-    T = T0*theta(xx,final_beta)*(1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n)); //keV
+    fnt = pntfrac(r, R500);
+    T = T0*theta(xx,final_beta)*(1.0 - fnt); //keV
 
     Pgas = ngas*T; // keV/cm^3
     return Pgas;
@@ -1583,55 +1171,13 @@ double calc_gas_num_density(double r, double R500){
 
     return ngas;
 }
-
-double calc_clumped_gas_density(double r, double R500){
-
-    double xx, rhogas;
-    double xb, clump;
-
-    xx = r/(1000.0*ri/mpc); //r in Mpc, ri in km!, xx is r/ri 
-    xb = x_clump * R500; //x_clump in R500, xb in units of Mpc (same as r)
-
-    rhogas = rho0*pow(theta(xx,final_beta), n)/pow(mpc,3)/1.e3*m_sun; // g/cm^3
-    
-    if ( r < x_clump ) {
-        clump = 1.0 + clump0*pow (r/xb, alpha_clump1);
-    } 
-    else {
-        clump = 1.0 + clump0*pow (r/xb, alpha_clump2);
-    }
-    if ( clump < 1.0 ) clump = 1.0;
-
-    rhogas *= sqrt(clump);
-
-    return rhogas;
-
-}
-
-double calc_clumped_gas_num_density(double r, double R500){
-    double xx, ngas;
-    xx = r/(1000.0*ri/mpc);
-    ngas = rho0*pow(theta(xx,final_beta), n)/m_p/mmw/pow(mpc,3)/1.e6*m_sun; // cm^-3
-
-    double clump;
-    double xb = x_clump * R500; //x_clump in R500, xb in units of Mpc (same as r)
-
-    if ( r < x_clump ) {
-        clump = 1.0 + clump0*pow (r/xb, alpha_clump1);
-    } else {
-        clump = 1.0 + clump0*pow (r/xb, alpha_clump2);
-    }
-    if ( clump < 1.0 ) clump = 1.0;
-    ngas *= sqrt(clump);
-
-    return ngas;
-}
-
 double calc_gas_temperature(double r, double R500){
-    double xx, T;
+    double xx, T, fnt;
 
     xx = r/(1000.0*ri/mpc);
-    T = T0*theta(xx,final_beta)*(1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n)); //keV
+    fnt = pntfrac(r, R500);
+    T = T0*theta(xx,final_beta)*(1.0 - fnt); //keV
+    //T = T0*theta(xx,final_beta)*(1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n)); //keV
     if ( T < 0.0 ) T = 0.0;
     return T; 
 }
@@ -1697,7 +1243,8 @@ double thermal_pressure_outer_rad() {
     // returns outermost physical radius for thermal pressure profiles (i.e. the point where the thermal pressure
     // goes to zero (in units of rvir)
     //return pow((1.0 / delta_rel), 1.0/delta_rel_n) * R500toRvir; // last factor converts from units of R500 to units of Rvir
-    return pow((1.0 / delta_rel), 1.0/delta_rel_n);//in unit of R500
+    //return pow((1.0 / delta_rel), 1.0/delta_rel_n);//in unit of R500
+    return 5.0;
 }
 
 
@@ -1708,7 +1255,9 @@ double calc_Mhse_Mtot_ratio(double R500) {
     double diff_tot= (theta(rplus, final_beta)- theta(rminus, final_beta))/(2.0*delx/(1000.0*ri/mpc));
     //cout<< final_beta<<endl;
 
-    return 1.0 - delta_rel - delta_rel*delta_rel_n/diff_tot*pow(theta(R500/(1000.0*ri/mpc), final_beta), 1)/(n+1)/R500*(1000.0*ri/mpc);
+    double fnt = pntfrac(R500, R500);
+
+    return 1.0 - fnt - fnt*A_nt/diff_tot*pow(theta(R500/(1000.0*ri/mpc), final_beta), 1)/(n+1)/R500*(1000.0*ri/mpc);
 }
 
 double* calc_gas_pressure_profile(double rcutoff, double xin, double xfinal, int xbinnum, double R500, double P500) {
@@ -1724,7 +1273,9 @@ double* calc_gas_pressure_profile(double rcutoff, double xin, double xfinal, int
         xx=i*(xfinal-xin)/xbinnum * R500/(1000.0*ri/mpc);
         //ysz[i] =  (double)mmw*p0/1e6*pow(theta(xx,final_beta),(n+1.0))/mu_e;//*xx*xx; //keV/cm^3
         ysz[i] =  p0/1e6*pow(theta(xx,final_beta),(n+1.0));//*xx*xx; //keV/cm^3
-        if ((int)pturbrad==2) ysz[i] = ysz[i]*(1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n));
+        //if ((int)pturbrad==2)
+        double fnt = pntfrac(xx*(1000.0*ri/mpc), R500); 
+        ysz[i] = ysz[i]*(1.0 - fnt);
         r[i]= xx*(1000.0*ri/mpc)/R500;
         Vol[i]= xx*xx;
         //cout<< i<<" "<<r[i]*0.71 <<" "<< pow(r[i]*0.71,3)*ysz[i]/P500<<endl;
@@ -1743,7 +1294,9 @@ double* calc_gas_temp_profile(double rcutoff, double xin, double xfinal, int xbi
     for (i=0;i<xbinnum;i++) {
         xx = (double)pow(2.7183, log(xin)+i*delx)/(1000.0*ri/mpc);
         Tsz[i] =  (double)T0*theta(xx,final_beta); //keV
-        if ((int)pturbrad==2) Tsz[i] = Tsz[i]*(1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n));
+        //if ((int)pturbrad==2) 
+        double fnt = pntfrac(xx*(1000.0*ri/mpc), R500); 
+        Tsz[i] = Tsz[i]*(1.0 - fnt);
         x[i]= xx;
         //cout<< xx*(1000.0*ri/mpc)/R500 <<" " << ysz[i]<< endl;
     }
@@ -1765,27 +1318,6 @@ double* calc_gas_profile(double rcutoff, double xin, double xfinal, int xbinnum,
     }
     return &rhogas[0];
 }
-
-double* calc_clumpf_profile(double rcutoff, double xin, double xfinal, int xbinnum, double R500) {
-    double xx, delx;
-    int i;
-    xin= xin*rcutoff*radius;
-    xfinal= xfinal*rcutoff*radius;
-    delx= log(xfinal/xin)/(xbinnum-1);
-
-    double xb = x_clump * R500; // xb in Mpc
-
-    for (i=0;i<xbinnum;i++) {
-        xx = (double)pow(2.7183, log(xin)+i*delx); // xx in Mpc;
-        if ( xx < xb ) {
-            clumpf[i] = 1.0 + (double)clump0*pow (xx/xb, alpha_clump1);
-        } else {
-            clumpf[i] = 1.0 + (double)clump0+pow (xx/xb, alpha_clump2);
-        }
-    }
-    return &clumpf[0];
-}
-
 
 double return_ngas(double r){
     double xx = (double)r/(1000.0*ri/mpc); // distance from center in units of scale radius
@@ -1813,9 +1345,10 @@ double return_ngas_mod(double r, double R500, double x_break, double npoly_mod){
     return n_gas;
 }
 
-double return_clumpf ( double r, double R200m, double clump0, double alpha_clump, double beta_clump, double gamma_clump ) {
+double return_clumpf ( double r, double R500, double clump0, double alpha_clump, double beta_clump, double gamma_clump ) {
 
     double clumpf;
+    double R200m = R500/R500toR200m;
     double x = r/R200m;    
 
     clumpf = 1. + clump0*pow(x, alpha_clump)*pow(1+pow(x,gamma_clump), (beta_clump-alpha_clump)/(gamma_clump)) ;
@@ -1827,7 +1360,8 @@ double returnPth(double r, double R500){
     // returns thermal pressure at distance r/Mpc, in keV/cm^3
     // for electron pressure muliply this with mmw/mu_e
     double xx = (double)r/(1000.0*ri/mpc); //xx is r in units of Rs
-    double thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+    double fnt = pntfrac(r, R500);
+    double thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - fnt);
 
     thisP *= 1.0e-6; //convert to keV cm^-3
     return thisP;
@@ -1842,13 +1376,12 @@ double returnP_mod(double r, double R500, double x_break, double npoly_mod, doub
     double x_break_Rs = x_break*R500/(1000.0*ri/mpc);
     double thisP;
     if(r/R500>x_break){
-        thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+        //thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+        thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0));
     }
     else if(r/R500<=x_break){
         thisP = (double)p0*pow(theta_mod(xx,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0));
         thisP *= pow(theta(x_break_Rs,final_beta),(n+1.0)) / pow(theta_mod(x_break_Rs,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0)); // normalize the break
-        thisP *= (1.0 - delta_rel*pow(r/R500, nnt_mod));  // add non-th. pressure
-        thisP *= (1.0 - delta_rel*pow(x_break, delta_rel_n)) / (1.0 - delta_rel*pow(x_break, nnt_mod)); // normalize the break
     }
 
     thisP *= 1.0e-6; //convert to keV cm^-3
@@ -1864,11 +1397,14 @@ double returnP_mod2(double r, double R500, double x_break, double npoly_mod, dou
     double x_break_Rs = x_break*R500/(1000.0*ri/mpc);
     double thisP_outside, thisP_inside, thisP;
 
-    thisP_outside = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+    //thisP_outside = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+    thisP_outside = (double)p0*pow(theta(xx,final_beta),(n+1.0));
+
     thisP_inside = (double)p0*pow(theta_mod(xx,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0));
     thisP_inside *= pow(theta(x_break_Rs,final_beta),(n+1.0)) / pow(theta_mod(x_break_Rs,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0)); // normalize the break
-    thisP_inside *= (1.0 - delta_rel*pow(r/R500, nnt_mod));  // add non-th. pressure
-    thisP_inside *= (1.0 - delta_rel*pow(x_break, delta_rel_n)) / (1.0 - delta_rel*pow(x_break, nnt_mod)); // normalize the break
+
+    //thisP_inside *= (1.0 - delta_rel*pow(r/R500, nnt_mod));  // add non-th. pressure
+    //thisP_inside *= (1.0 - delta_rel*pow(x_break, delta_rel_n)) / (1.0 - delta_rel*pow(x_break, nnt_mod)); // normalize the break
 
     double ratio = 0.5*(1.0-tanh((r/R500-x_break)/x_smooth)); // ratio=1 inside and ratio=0 outside
     thisP = ratio*thisP_inside + (1-ratio)*thisP_outside;
@@ -1885,14 +1421,18 @@ double returnPth_mod(double r, double R500, double x_break, double npoly_mod) {
     double xx = (double)r/(1000.0*ri/mpc); //xx is r in units of Rs
     double x_break_Rs = x_break*R500/(1000.0*ri/mpc);
     double thisP;
+    double fnt = pntfrac(r, R500);
     if(r/R500>x_break){
-        thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+        //thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+        thisP = (double)p0*pow(theta(xx,final_beta),(n+1.0));
     }
     else if(r/R500<=x_break){
         thisP = (double)p0*pow(theta_mod(xx,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0));
         thisP *= pow(theta(x_break_Rs,final_beta),(n+1.0)) / pow(theta_mod(x_break_Rs,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0)); // normalize the break
+
     }
 
+    thisP *= (1.0 - fnt);
     thisP *= 1.0e-6; //convert to keV cm^-3
 
     return thisP;
@@ -1908,15 +1448,20 @@ double returnPth_mod2(double r, double R500, double x_break, double npoly_mod, d
     double x_break_Rs = x_break*R500/(1000.0*ri/mpc);
     double thisP_outside, thisP_inside, thisP;
 
-    thisP_outside = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+    double fnt = pntfrac(r, R500);
+
+    //thisP_outside = (double)p0*pow(theta(xx,final_beta),(n+1.0)) * (1.0 - delta_rel*pow(r/R500, delta_rel_n));
+    thisP_outside = (double)p0*pow(theta(xx,final_beta),(n+1.0));
     thisP_inside = (double)p0*pow(theta_mod(xx,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0));
     thisP_inside *= pow(theta(x_break_Rs,final_beta),(n+1.0)) / pow(theta_mod(x_break_Rs,final_beta,x_break_Rs,npoly_mod),(npoly_mod+1.0)); // normalize the break
+
     //thisP_inside *= (1.0 - delta_rel*pow(r/R500, nnt_mod)) * mmw/mu_e;  // add non-th. pressure
     //thisP_inside *= (1.0 - delta_rel*pow(x_break, delta_rel_n)) / (1.0 - delta_rel*pow(x_break, nnt_mod)); // normalize the break
 
     double ratio = 0.5*(1.0-tanh((r/R500-x_break)/x_smooth)); // ratio=1 inside and ratio=0 outside
     thisP = ratio*thisP_inside + (1-ratio)*thisP_outside;
     //cout<<r/R500<<" "<<ratio<<" "<<1-ratio<<endl;
+    thisP *= (1.0 - fnt);
     thisP *= 1.0e-6; //convert to keV cm^-3
 
     return thisP;
@@ -1985,17 +1530,20 @@ double return_entropy_mod(double r, double R500, double x_break, double npoly_mo
     double Rs = 1000.0*ri/mpc;
     double x_break_Rs = x_break*R500/Rs; // break radius in units of scale radius
     double gas_entropy;
+    double fnt = pntfrac(r, R500);
 
     if(r/R500>x_break){
         gas_entropy = pow(mmw*m_p,5.0/3.0) * p0/pow(rho0_alt,5.0/3.0) * pow(theta(xx,final_beta),1.0-(2.0/3.0)*n);
-        gas_entropy *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n));
+        //gas_entropy *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n));
+        gas_entropy *= (1.0 - fnt);
     }
     else if(r/R500<=x_break){ // here the power law breaks
 
         gas_entropy = pow(mmw*m_p,5.0/3.0) * p0/pow(rho0_alt,5.0/3.0) * pow(theta_mod(xx,final_beta,x_break_Rs,npoly_mod),1.0-(2.0/3.0)*npoly_mod);
         gas_entropy *= pow(theta(x_break_Rs,final_beta),1.0-(2.0/3.0)*n) / pow(theta_mod(x_break_Rs,final_beta,x_break_Rs,npoly_mod),1.0-(2.0/3.0)*npoly_mod); // normalize at the break point
-        gas_entropy *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, nnt_mod));
-        gas_entropy *= (1.0 - delta_rel*pow(x_break,delta_rel_n))/(1.0 - delta_rel*pow(x_break, nnt_mod));
+        //gas_entropy *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, nnt_mod));
+        //gas_entropy *= (1.0 - delta_rel*pow(x_break,delta_rel_n))/(1.0 - delta_rel*pow(x_break, nnt_mod));
+        gas_entropy *= (1.0 - fnt);
     }
     gas_entropy *= 1.e4; // units keV*cm^2
     //double electron_entropy = pow(mu_e/mmw,2.0/3.0) * gas_entropy; // units keV*cm^2
@@ -2040,13 +1588,16 @@ double return_entropy_mod2(double r, double R500, double x_break, double npoly_m
     double x_break_Rs = x_break*R500/Rs; // break radius in units of scale radius
     double gas_entropy_inside, gas_entropy_outside, gas_entropy;
 
+    double fnt = pntfrac(r, R500);
     gas_entropy_outside = pow(mmw*m_p,5.0/3.0) * p0/pow(rho0_alt,5.0/3.0) * pow(theta(xx,final_beta),1.0-(2.0/3.0)*n);
-    gas_entropy_outside *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n));
+    //gas_entropy_outside *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n));
+    gas_entropy_outside *= (1.0 - fnt);
 
     gas_entropy_inside = pow(mmw*m_p,5.0/3.0) * p0/pow(rho0_alt,5.0/3.0) * pow(theta_mod(xx,final_beta,x_break_Rs,npoly_mod),1.0-(2.0/3.0)*npoly_mod);
     gas_entropy_inside *= pow(theta(x_break_Rs,final_beta),1.0-(2.0/3.0)*n) / pow(theta_mod(x_break_Rs,final_beta,x_break_Rs,npoly_mod),1.0-(2.0/3.0)*npoly_mod); // normalize at the break point
-    gas_entropy_inside *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, nnt_mod));
-    gas_entropy_inside *= (1.0 - delta_rel*pow(x_break,delta_rel_n))/(1.0 - delta_rel*pow(x_break, nnt_mod));
+    //gas_entropy_inside *= (1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, nnt_mod));
+    //gas_entropy_inside *= (1.0 - delta_rel*pow(x_break,delta_rel_n))/(1.0 - delta_rel*pow(x_break, nnt_mod));
+    gas_entropy_inside *= (1.0 - fnt);
 
     double ratio = 0.5*(1.0-tanh((r/R500-x_break)/x_smooth)); // ratio=1 inside and ratio=0 outside
     gas_entropy = ratio*gas_entropy_inside + (1-ratio)*gas_entropy_outside;
@@ -2071,9 +1622,11 @@ double* calc_gas_entropy_profile(double rcutoff, double xin, double xfinal, int 
         xx = (double)pow(2.7183, log(xin)+i*delx)/(1000.0*ri/mpc);
         Ksz[i] =  (double)T0*theta(xx,final_beta)/pow(mmw*rho0*pow(theta(xx,final_beta), n)/mu_e*convert,2./3.); //keV.cm^2
         //ysz[i]= mmw*p0/1e6*pow(theta(xx,final_beta),(n+1.0))/mu_e/pow(mmw*rho0*pow(theta(xx,final_beta), n)/mu_e*convert,5./3.);
-        if ((int)pturbrad==2) Ksz[i] = Ksz[i]*(1.0 - delta_rel*pow(xx*(1000.0*ri/mpc)/R500, delta_rel_n));
-            x[i]= xx;
-            //cout<< xx*(1000.0*ri/mpc)/R500 <<" " << ysz[i]<< endl;
+        //if ((int)pturbrad==2) 
+        double fnt = pntfrac(xx*(1000.0*ri/mpc), R500);
+        Ksz[i] = Ksz[i]*(1.0 - fnt);
+        x[i]= xx;
+        //cout<< xx*(1000.0*ri/mpc)/R500 <<" " << ysz[i]<< endl;
     }
     return &Ksz[0];
 }
@@ -2096,11 +1649,11 @@ double* calc_ellspace_sz_profile(double rcutoff, double ang_diam_z, double redsh
     // note rcutoff is in units of Rvir
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error, upperlim = rcutoff*C, elli = ang_diam_z/(1000.0*ri/mpc);
-    double pt = 0.0;
-    double params[9] = {delta_rel, n, C, final_beta, 0.0, elli, pturbrad, delta_rel_n, R500/(1000.0*ri/mpc)};
+    double params[9] = {A_nt, n, C, final_beta, 0.0, elli, B_nt, gamma_nt, R500/(1000.0*ri/mpc)};
     gsl_function F;
     int i;
-    if ((int)pturbrad==2) upperlim = min(upperlim, thermal_pressure_outer_rad() * C);
+    //if ((int)pturbrad==2) 
+    upperlim = min(upperlim, thermal_pressure_outer_rad() * C);
     F.function = &yfft_func;
     F.params = &params;
     for (i=0;i<nell;i++) {
@@ -2151,17 +1704,19 @@ double* calc_ellspace_sz_profile_spline(double rcutoff, double ang_diam_z, doubl
     xx = new double [nxbins];
     yy = new double [nxbins];
     // now make absolutely sure thermal pressure never goes negative
-    if ((int)pturbrad==2) upperlim = min(upperlim, thermal_pressure_outer_rad() * C);
+    //if ((int)pturbrad==2) 
+    upperlim = min(upperlim, thermal_pressure_outer_rad() * C);
 
     for (j=0;j<nxbins;j++) xx[j] = (double)j * upperlim / ((double)(nxbins-1));
     yy[0] = 0.0;
     for (i=0;i<nell;i++) {
         for (j=1;j<nxbins;j++) {
             yy[j] = pow(theta(xx[j],final_beta),n+1.0)*xx[j]*xx[j]*sin(ell[i]*xx[j]/elli)/(ell[i]*xx[j]/elli);
-            if ((int)pturbrad==2) {
-                yy[j] = yy[j]*(1.0 - delta_rel*pow(xx[j]*(1000.0*ri/mpc)/R500, delta_rel_n));
+            //if ((int)pturbrad==2) {
+            double fnt = pntfrac(xx[j]*(1000.0*ri/mpc), R500);
+            yy[j] = yy[j]*(1.0 - fnt);
                 //if (yy[j]<0.0) yy[j] = 0.0;
-            }
+            //}
         }
         gsl_spline_init (spline, xx, yy, nxbins);
         result = gsl_spline_eval_integ (spline, xx[0], xx[nxbins-1], acc);
@@ -2221,11 +1776,12 @@ double* calc_kspace_sz_profile(double rcutoff, double ang_diam_z, double redshif
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error, upperlim = rcutoff*C, elli = ang_diam_z/(1000.0*ri/mpc);
     double pt = 0.0;
-    pt= pturbrad;
-    double params[9] = {delta_rel, n, C, final_beta, 0.0, elli, pt, delta_rel_n, R500/(1000.0*ri/mpc)};
+    //pt= pturbrad;
+    double params[9] = {A_nt, n, C, final_beta, 0.0, elli, B_nt, gamma_nt, R500/(1000.0*ri/mpc)};
     gsl_function F;
     int i;
-    if ((int)pturbrad==2) upperlim = min(upperlim, thermal_pressure_outer_rad() * C);
+    //if ((int)pturbrad==2) 
+    upperlim = min(upperlim, thermal_pressure_outer_rad() * C);
     F.function = &yfft_func_k;
     F.params = &params;
     for (i=0;i<nrads;i++) {
@@ -2262,9 +1818,8 @@ void calc_2d_sz_profile(double rcutoff, double R500, double *r, double* ysz) {
     // note rcutoff is in units of Rvir
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double xx, result, error, upperlim = rcutoff*C;
-    double pt = 0.0;
-    pt= (double)pturbrad;
-    double params[8] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/(1000.0*ri/mpc)};
+    //pt= (double)pturbrad;
+    double params[8] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/(1000.0*ri/mpc)};
     gsl_function F;
     int i;
     F.function = &yproj_func;
@@ -2304,9 +1859,8 @@ double return_ysz(double rcutoff, double R500, double this_r){
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double xx, result, error;
     double upperlim = rcutoff*C; // upperlim is the cutoff radius in units of the NFW scale radius
-    double pt = 0.0;
-    pt= (double)pturbrad;
-    double params[8] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/NFW_Rs_Mpc};
+    //pt= (double)pturbrad;
+    double params[8] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/NFW_Rs_Mpc};
     gsl_function F;
     int i;
     F.function = &yproj_func;
@@ -2350,7 +1904,7 @@ double return_ksz(double vlos, double rcutoff, double R500, double this_r){
     //pt= (double)pturbrad;
 
     xx = (double)(this_r/NFW_Rs_Mpc); // xx = distance to center in units of NFW scale radius.
-    double params[8] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/NFW_Rs_Mpc};
+    double params[8] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/NFW_Rs_Mpc};
     double this_ksz=0;
 
     gsl_function F;
@@ -2453,7 +2007,7 @@ double return_tau0(double rcutoff, double R500){ // returns the central optical 
     //pt= (double)pturbrad;
 
     xx = 0.0; // xx = distance to center in units of NFW scale radius.
-    double params[8] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/NFW_Rs_Mpc};
+    double params[8] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/NFW_Rs_Mpc};
 
     gsl_function F;
     F.function = &gasproj_func;
@@ -2477,12 +2031,11 @@ double return_tau_profile(double rcutoff, double R500, double r){
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double xx, result, error;
     double upperlim = rcutoff*C; // the upper integration limit in units of the NFW scale radius
-    double pt = 0.0;
+    //double pt = 0.0;
     //pt= (double)pturbrad;
 
     xx = r/NFW_Rs_Mpc; // xx = distance to center in units of NFW scale radius.
-    double params[8] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/NFW_Rs_Mpc};
-
+    double params[8] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/NFW_Rs_Mpc};
     gsl_function F;
     F.function = &gasproj_func;
     F.params = &params;
@@ -2506,10 +2059,10 @@ double return_tau_profile_mod(double rcutoff, double R500, double r, double x_br
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double xx, result, error;
     double upperlim = rcutoff*C; // the upper integration limit in units of the NFW scale radius
-    double pt = pturbrad;
+    //double pt = pturbrad;
 
     xx = r/NFW_Rs_Mpc; // xx = distance to center in units of NFW scale radius.
-    double params[10] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/NFW_Rs_Mpc, x_break, npoly_mod};
+    double params[10] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/NFW_Rs_Mpc, x_break, npoly_mod};
 
     gsl_function F;
     F.function = &gasproj_func_mod;
@@ -2532,8 +2085,8 @@ void calc_2d_gas_profile(double rcutoff, double R500, double *r, double* ysz) {
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double xx, result, error, upperlim = rcutoff*C;
     double pt = 0.0;
-    pt= (double)pturbrad;
-    double params[8] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/(1000.0*ri/mpc)};
+    //pt= (double)pturbrad;
+    double params[8] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/(1000.0*ri/mpc)};
     gsl_function F;
     int i;
 
@@ -2561,8 +2114,8 @@ double return_Yx500(double R500){
     double units = p0 * pow(mpc,3.0) * 4.0*M_PI * m_p/m_sun * mmw * pow(R500,3) * Tspec_to_Tmg;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
-    double pt = (double)pturbrad;
-    double params[8] = {delta_rel, n, C, final_beta, 0.0, pt, delta_rel_n, R500/(1000.0*ri/mpc)};
+    //double pt = (double)pturbrad;
+    double params[8] = {A_nt, n, C, final_beta, 0.0, B_nt, gamma_nt, R500/(1000.0*ri/mpc)};
     gsl_function F;
     F.function = &yint_func_sam;
     F.params = &params;
@@ -2579,8 +2132,7 @@ double calc_mgas500(double R500) { // R500 has to be in Mpc
     double mgas500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
-    double pt = 2.0;
-    double params[6] = {delta_rel, n, C, final_beta, f_s, pt};
+    double params[7] = {n, C, final_beta, f_s, A_nt, B_nt, gamma_nt};
     gsl_function F;
     int i;
     F.function = &mgas500_func;
@@ -2598,8 +2150,7 @@ double calc_mgas500_mod(double R500, double x_break, double npoly_break) {
     double mgas500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
-    double pt = 2.0;
-    double params[8] = {delta_rel, n, C, final_beta, f_s, pt, x_break*R500/NFW_Rs_Mpc, npoly_break};
+    double params[9] = {n, C, final_beta, f_s, A_nt, B_nt, gamma_nt, x_break*R500/NFW_Rs_Mpc, npoly_break};
     gsl_function F;
     int i;
     F.function = &mgas500_func_mod;
@@ -2610,7 +2161,7 @@ double calc_mgas500_mod(double R500, double x_break, double npoly_break) {
     return mgas500;
 }
 
-double calc_mgas500_mod_clumped(double R500, double x_break, double npoly_break, double x_clump, double alpha_clump1, double alpha_clump2, double clump0) {
+double calc_mgas500_mod_clumped(double R500, double x_break, double npoly_break, double gamma_clump, double gamma_clump1, double beta_clump, double clump0) {
     // R500 has to be in Mpc, x_break in units of R500
     double units = rho0*4.0*M_PI*pow(1000.0*ri/mpc,3);
     double NFW_Rs_Mpc = (1000.0*ri/mpc);
@@ -2618,7 +2169,7 @@ double calc_mgas500_mod_clumped(double R500, double x_break, double npoly_break,
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
     double pt = 2.0;
-    double params[12] = {delta_rel, n, C, final_beta, f_s, pt, x_break*R500/NFW_Rs_Mpc, npoly_break,x_clump*R500/NFW_Rs_Mpc, alpha_clump1, alpha_clump2, clump0};
+    double params[13]= {n, C, final_beta, f_s, A_nt, B_nt, gamma_nt, x_break*R500/NFW_Rs_Mpc, npoly_break, clump0, alpha_clump, beta_clump, gamma_clump };
     gsl_function F;
     int i;
     F.function = &mgas500_func_mod_clumped;
@@ -2640,14 +2191,14 @@ double return_fgas500_mod(double M500, double R500, double x_break, double npoly
 double return_fgas500_mod_clumped(double M500, double R500, double x_break, double npoly_break, double x_clump, double alpha_clump1, double alpha_clump2, double clump0){
     return calc_mgas500_mod_clumped(R500, x_break, npoly_break,x_clump, alpha_clump1, alpha_clump2, clump0 )/M500;
 }
-
+/*
 double calc_mgas2500(double R2500) { // R500 has to be in Mpc
     double units = rho0*4.0*M_PI*pow(1000.0*ri/mpc,3);
     double NFW_Rs_Mpc = (1000.0*ri/mpc);
     double mgas2500;
     gsl_integration_workspace * w = gsl_integration_workspace_alloc (10000);
     double result, error;
-    double params[6] = {delta_rel, n, C, final_beta, f_s, pturbrad};
+    double params[5] = {delta_rel, n, C, final_beta, f_s};
     gsl_function F;
     int i;
     F.function = &mgas500_func;
@@ -2681,7 +2232,7 @@ double return_fgas2500(double M2500, double R2500){
 double return_fgas2500_mod(double M2500, double R2500, double R500, double x_break, double npoly_break){
     return calc_mgas2500_mod(R2500,R500,x_break,npoly_break)/M2500;
 }
-
+*/
 };
 
 // -- end of class
