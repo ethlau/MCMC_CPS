@@ -83,7 +83,7 @@ struct Flender_param{
   double gamma_mod_zslope; // fiducial : 1.72
   double x_break; // fiducial : 0.195
   double x_smooth; // fiducial : 0.01
-  double n_nt_mod; // fiducial : 0.80
+  //double n_nt_mod; // fiducial : 0.80
   double clump0;
   double alpha_clump;
   double beta_clump;
@@ -176,7 +176,7 @@ void free_cosmology(){
   free_halo_info();
 }
 
-void set_Flender_params(double p0, double p1, double p2, double p3, double p4, double p5, double p6, double p7, double p8, double p9, double p10, double p11, double p12, double p13, double p14, double p15, double p16) {
+void set_Flender_params(double p0, double p1, double p2, double p3, double p4, double p5, double p6, double p7, double p8, double p9, double p10, double p11, double p12, double p13, double p14, double p15) {
   F.eps_f  =p0;
   F.eps_DM =p1;
   F.f_star =p2;
@@ -190,11 +190,11 @@ void set_Flender_params(double p0, double p1, double p2, double p3, double p4, d
   F.gamma_mod_zslope =p9;
   F.x_break =p10;
   F.x_smooth =p11;
-  F.n_nt_mod =p12;
-  F.clump0 =p13;
-  F.alpha_clump =p14;
-  F.beta_clump =p15;
-  F.gamma_clump =p16;
+  //F.n_nt_mod =p12;
+  F.clump0 =p12;
+  F.alpha_clump =p13;
+  F.beta_clump =p14;
+  F.gamma_clump =p15;
 }
 
 npy::ndarray return_xx_power(npy::ndarray x_input){
@@ -258,7 +258,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
       //flux[i][j] = calc_Flender_xray_flux (cosm_model, z_fft[i], M_fft[j], xlist); //ergs/s/cm^2
       double Rs;		
       std::vector<double> emission;
-      emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist, &Rs); // ergs/s/cm^3/str
+      emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist, &Rs); // cts/s/sr
       tab_r500[j+nmbin*i] = Rs;
       
       double yp1 = 1.e31;
@@ -358,7 +358,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 			
       // comoving distance in units of Mpc/h;
       double covd = chi_fast(zhere);
-      double dVdz = covd*covd*C*CP.hubble/H_z(zhere); //dVdz in (Mpc/h)^3
+      double dVdz = covd*covd*C*CP.hubble/H_z(zhere); //dV/dz/dOm in (Mpc/h)^3/sr
       double calc_k = ell_bin/covd; // k in h Mpc^-1
       double gfac = (growth(1./(1.+zhere))/growth(1.0));
       // PowerSpec takes k in h/Mpc, outputs h^3 Mpc^-3
@@ -373,7 +373,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 	    double ells = covd/(1+zhere)/(rs *CP.hubble); // = ell_500 = D_A / Rs; D_a in Mpc/h;
 	    double l_ls = ell_bin/ells;
 	    for(int il=0;il<Nell;il++){
-	        tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)]; // ergs/s/cm^3/sr
+	        tab_fc_int[il] = tab_Fourier[il + Nell * (jm + nmbin * iz)]; // cts/s/sr
 	    }
 				
 	    double xl;
@@ -390,7 +390,7 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 	        xl = 0;
 	    } else {
 	        xl = (tab_fc_int[index+1]-tab_fc_int[index])/(tab_l_ls[index+1]-tab_l_ls[index])*(log10(l_ls)-tab_l_ls[index]) + tab_fc_int[index];
-	        xl = xl * 4*M_PI*(rs*mpc)/ells/ells; // ergs/s/cm^3/sr
+	        xl = xl * 4*M_PI*(rs*mpc)/ells/ells;
 	    }
 
 	    //double m200m = M_vir_to_M_delta(zhere, Mvir, 200.0);		
@@ -418,8 +418,8 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
       oneh_xx = tab_spline_and_integral(nmbin, mlist, cl_xx_1_int_m, cl_xx_1_int_m2);
       twoh_xx = tab_spline_and_integral(nmbin, mlist, cl_xx_2_int_m, cl_xx_2_int_m2);
 			
-      cl_xx_1_int_z[iz] = zhere * dVdz * oneh_xx; // erg^2/cm^4/str^2
-      cl_xx_2_int_z[iz] = zhere * dVdz * twoh_xx * twoh_xx * Pk; //erg^2/cm^4/str^2
+      cl_xx_1_int_z[iz] = zhere * dVdz * oneh_xx;
+      cl_xx_2_int_z[iz] = zhere * dVdz * twoh_xx * twoh_xx * Pk;
       						
    }
 		
@@ -450,11 +450,11 @@ npy::ndarray return_xx_power(npy::ndarray x_input){
 }
 
 npy::ndarray return_xx_power_alt(npy::ndarray x_input){
-  int nzbin = 11;
+  int nzbin = 21;
   double zmin = 1e-4;
-  double zmax = 3.0;
+  double zmax = 2.0;
 	
-  int nmbin = 11;
+  int nmbin = 21;
   double logMvir_min= 13.0;
   double logMvir_max= 16.0;
 
@@ -508,7 +508,7 @@ npy::ndarray return_xx_power_alt(npy::ndarray x_input){
     for(int j=0;j<nmbin;j++){
       double Rs;		
       std::vector<double> emission;
-      emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist, &Rs); // ergs/s/cm^3/str
+      emission = calc_Flender_xray_emissivity_profile(cosm_model, z_fft[i], M_fft[j], xlist, &Rs); // cts/s/arcmin^2
       tab_rs[j+nmbin*i] = Rs;
       for(int k=0;k<Nx;k++) {
         tab_profile[k + Nx * ( j + nmbin * i)] = emission[k];
@@ -576,38 +576,44 @@ npy::ndarray return_xx_power_alt(npy::ndarray x_input){
 			
       double zhere = exp(dlnz*(double)(1.*iz) + log(zmin));
       zlist[iz] = log(zhere);
-			
+
       // comoving distance in units of Mpc/h;
       double covd = chi_fast(zhere);
-      double dVdz = covd*covd*C*CP.hubble/H_z(zhere); //dVdz in (Mpc/h)^3
-      double calc_k = ell_bin/covd; // k in h Mpc^-1
+      double dVdz = covd*covd*C*CP.hubble/H_z(zhere); //dV/dz in (Mpc/h)^3
+      double calc_k = ell_bin/covd; // k = ell/covd in h Mpc^-1
       double gfac = (growth(1./(1.+zhere))/growth(1.0));
-      // PowerSpec takes k in h/Mpc, outputs h^3 Mpc^-3
+      // PowerSpec takes k in h/Mpc, outputs h^-3 Mpc^3
       double Pk = gfac*gfac*PowerSpec(calc_k);
-			
+
+	
       for(int jm=0;jm<nmbin;jm++){
 	    double logMvir = dlogm*(double)(1.*jm) + logMvir_min;
 	    mlist[jm] = logMvir;
 	    double Mvir = pow(10., logMvir) * CP.hubble ;// in the unit of Msun/h
 	    double rs = tab_rs[jm+nmbin*iz]; // in physical Mpc
-	    double ells = covd/(1+zhere)/(rs *CP.hubble); // = ell_s = D_A / Rs; D_a = cchi/(1+z) in Mpc/h;
-	    double l_ls = ell_bin/ells;
+	    double ells = covd/(1+zhere)/(rs *CP.hubble); // = ell_s = D_A / Rs; D_A = covd/(1+z) in Mpc/h;
+
+	    for(int k=0;k<Nell;k++){
+	        tab_fc_int[k] = 0.0;
+	    }
 	    for(int k=0;k<Nx;k++){
-	        tab_fc_int[k] = tab_profile[k + Nx*(jm + nmbin*iz)]; // ergs/s/cm^3/sr
+	        tab_fc_int[k] = tab_profile[k + Nx*(jm + nmbin*iz)]; //cnts/s/cm/arcmin^2
 	    }
 	    double xl = 0.0;
 	    for(int il=0;il<Nell;il++){
-                double a = l_ls * xlist[il];
-	        xl += dlogx * pow(xlist[il], 3.0) * tab_fc_int[il] * sinc(a);
+	        double l_ls = (ell_bin+0.5)/ells;
+                double lx = l_ls * xlist[il];
+
+	        xl += dlogx * pow(xlist[il], 3.0) * tab_fc_int[il] * sinc(lx)/pow(2.0*M_PI, 1.5); 
             }
-            xl *= 4.0*M_PI*rs*mpc/(ells*ells); //ergs/s/cm^2/sr
+            xl *= 4.0*M_PI*rs*mpc/(ells*ells); // cnts/s/arcmin^2
 	    //double m200m = M_vir_to_M_delta(zhere, Mvir, 200.0);
 
 	    double mf = dndlogm_fast(log10(Mvir), zhere); //input Mvir in Msun/h; mf in (h^3 Mpc^-3)
 	    double b = halo_bias_fast(log10(Mvir), zhere); // b is dimensionless
 								
-	    cl_xx_1_int_m[jm] = mf * xl * xl; // erg^2/cm^4/sr^2 h^3 Mpc^-3 
-	    cl_xx_2_int_m[jm] = mf * b * xl;  // erg/cm^2/sr h^3 Mpc^-3
+	    cl_xx_1_int_m[jm] = mf * xl * xl; // cnt^2/s^2/arcmin^4 h^3 Mpc^-3 
+	    cl_xx_2_int_m[jm] = mf * b * xl;  // cnt/s/arcmin^2 h^3 Mpc^-3
 
       }
 						
@@ -620,8 +626,8 @@ npy::ndarray return_xx_power_alt(npy::ndarray x_input){
       oneh_xx = tab_spline_and_integral(nmbin, mlist, cl_xx_1_int_m, cl_xx_1_int_m2);
       twoh_xx = tab_spline_and_integral(nmbin, mlist, cl_xx_2_int_m, cl_xx_2_int_m2);
 			
-      cl_xx_1_int_z[iz] = zhere * dVdz * oneh_xx; // erg^2/cm^4/str^2
-      cl_xx_2_int_z[iz] = zhere * dVdz * twoh_xx * twoh_xx * Pk; //erg^2/cm^4/str^2
+      cl_xx_1_int_z[iz] = zhere * dVdz * oneh_xx; // cnt^2/s^2/arcmin^4
+      cl_xx_2_int_z[iz] = zhere * dVdz * twoh_xx * twoh_xx * Pk; // cnt^2/s^2/arcmin^4
       						
    }
 		
@@ -631,7 +637,7 @@ npy::ndarray return_xx_power_alt(npy::ndarray x_input){
     cl_xx_1 = tab_spline_and_integral(nzbin, zlist, cl_xx_1_int_z, cl_xx_1_int_z2);
     cl_xx_2 = tab_spline_and_integral(nzbin, zlist, cl_xx_2_int_z, cl_xx_2_int_z2);
 
-    signal[i] = cl_xx_1 + cl_xx_2;
+    signal[i] = cl_xx_1 + cl_xx_2; //cnt^2/s^2/arcmin^4 * sr
 
     if(cl_xx_1 != cl_xx_1 || cl_xx_2 != cl_xx_2) signal[i]=0;
     
@@ -879,7 +885,7 @@ npy::ndarray return_yy_power(npy::ndarray x_input){
     cl_xx_1 = tab_spline_and_integral(nzbin, zlist, cl_xx_1_int_z, cl_xx_1_int_z2);
     cl_xx_2 = tab_spline_and_integral(nzbin, zlist, cl_xx_2_int_z, cl_xx_2_int_z2);
 
-    signal[i] = cl_xx_1 + cl_xx_2;
+    signal[i] = cl_xx_1 + cl_xx_2; // in sr
 
     //printf("%f %e %e\n", ell_bin, cl_xx_1, cl_xx_2);
     if(cl_xx_1 != cl_xx_1 || cl_xx_2 != cl_xx_2) signal[i]=0;
@@ -1327,7 +1333,6 @@ std::vector<double> calc_Flender_pressure_profile(cosmo cosm_model, double z, do
 
   double npoly_mod, gamma_mod;
   gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
-  npoly_mod = 1.0/(gamma_mod - 1.0 );
 
   if (gamma_mod != 1 ) {
     npoly_mod = 1.0/(gamma_mod - 1.0 );
@@ -1444,7 +1449,6 @@ std::vector<double> calc_Flender_density_profile(cosmo cosm_model, double z, dou
 
   double npoly_mod, gamma_mod;
   gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
-  npoly_mod = 1.0/(gamma_mod - 1.0 );
   if (gamma_mod != 1 ) {
     npoly_mod = 1.0/(gamma_mod - 1.0 );
   } else {
@@ -1550,7 +1554,6 @@ double calc_Flender_mgas (cosmo cosm_model, double z, double Mvir, std::vector<d
 
   double npoly_mod, gamma_mod;
   gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
-  npoly_mod = 1.0/(gamma_mod - 1.0 );
   if (gamma_mod != 1 ) {
     npoly_mod = 1.0/(gamma_mod - 1.0 );
   } else {
@@ -1948,12 +1951,11 @@ double calc_Flender_xray_luminosity (cosmo cosm_model, double z, double Mvir, st
 
   double npoly_mod, gamma_mod;
   gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
-  if (gamma_mod != 1 ) {
+  if (gamma_mod != 1.0 ) {
     npoly_mod = 1.0/(gamma_mod - 1.0 );
   } else {
     npoly_mod = 1.e30;
   }
-
 
   double dvol[x.size()]; // radial shell vol in cm^3
   for(int xi=0;xi<x.size();xi++){
@@ -2090,7 +2092,6 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, doubl
 
   double npoly_mod, gamma_mod;
   gamma_mod = gamma_mod0 * pow((1.0+Redshift),gamma_mod_zslope);
-  npoly_mod = 1.0/(gamma_mod - 1.0 );
   if (gamma_mod != 1 ) {
     npoly_mod = 1.0/(gamma_mod - 1.0 );
   } else {
@@ -2110,11 +2111,12 @@ std::vector<double> calc_Flender_xray_emissivity_profile(cosmo cosm_model, doubl
         clump = 1.0 + clump1;
         if (clump < 1.0) clump = 1.0;
 
-        emi = icm_mod.return_xray_emissivity(ngas, kT, Redshift); // ergs/s/cm^3
+        emi = icm_mod.return_xray_emissivity(ngas, kT, Redshift); // cts/s/cm
         emi *= clump;
     } 		
 		
-    emi = emi/fac; // ergs/s/cm^3/str
+    emi = emi/fac; // cts/s/cm/sr
+    //emi = emi/(3282.8*3600); //cts/s/cm/arcmin^2
 
     emission.push_back(emi);
   }
@@ -2332,8 +2334,8 @@ double sinc( double x ) {
 
     double y;
 
-    if ( x <= 0.0 ){
-        y = 0.0;
+    if ( x == 0.0 ){
+        y = 1.0;
     } else {
         y = sin(x)/x;
     }

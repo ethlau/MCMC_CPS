@@ -22,8 +22,8 @@ size = comm.Get_size()
 
 if rank == 0 :
     now = datetime.datetime.now()
-    dirname = "../halo_model_Flender/MCMC/flat/{0:%Y-%m-%d}".format(now)
-    #dirname = "../halo_model_Flender/MCMC/gaussian/{0:%Y-%m-%d}".format(now)
+    #dirname = "../halo_model_Flender/MCMC/flat/{0:%Y-%m-%d}".format(now)
+    dirname = "../halo_model_Flender/MCMC/gaussian/{0:%Y-%m-%d}".format(now)
     if os.path.exists(dirname) == False:
         os.mkdir(dirname)
     else:
@@ -148,11 +148,35 @@ def lnprior(theta):
 
     ## see https://arxiv.org/pdf/1610.08029.pdf
     ## Flat priors on all parameters
-    if 1.09 <= eps_f <= 8.79 and 0.023 <= f_star <= 0.029 and 0.02 <= S_star <= 0.22 and 0.05 <= gamma_mod0 <= 0.21 and  0.01 <= clump0 <= 10.0 and 0.01 <= alpha_clump <= 10.0 and 0.01 <= beta_clump <= 10.0 and 0.01 <= gamma_clump <= 10.0 : 
-        return 0.0
-    else :
-        return -np.inf
+    #if 1.09 <= eps_f <= 8.79 and 0.023 <= f_star <= 0.029 and 0.02 <= S_star <= 0.22 and 0.05 <= gamma_mod0 <= 0.21 and  0.01 <= clump0 <= 10.0 and 0.01 <= alpha_clump <= 10.0 and 0.01 <= beta_clump <= 10.0 and 0.01 <= gamma_clump <= 10.0 : 
+    #    return 0.0
+    #else :
+    #    return -np.inf
     
+    ## Gaussian priors on non-clumping parameters
+    
+    if not (0.01 <= clump0 <= 10.0 and 0.01 <= alpha_clump <= 10.0 and 0.01 <= beta_clump <= 10.0 and 0.01 <= gamma_clump <= 10.0 and eps_f > 0 and f_star > 0 and S_star > 0 and gamma_mod0 > -1.0) :
+        return -np.inf
+
+    ## see https://stackoverflow.com/questions/49810234/using-emcee-with-gaussian-priors
+    eps_m = 3.97
+    eps_s = 4.82/2.0
+    f_star_m = 0.026
+    f_star_s = 0.003/2.0
+    S_star_m = 0.12
+    S_star_s = 0.10/2.0
+    gamma_mod0_m = 0.10
+    gamma_mod0_s = 0.11/2.0
+
+    eps_pr = np.log(1.0/(np.sqrt(2*np.pi)*eps_s))-0.5*(eps_f-eps_m)**2/(eps_s**2)
+    f_star_pr = np.log(1.0/(np.sqrt(2*np.pi)*f_star_s))-0.5*(f_star-f_star_m)**2/(f_star_s**2)
+    S_star_pr = np.log(1.0/(np.sqrt(2*np.pi)*S_star_s))-0.5*(S_star-S_star_m)**2/(S_star_s**2)
+    gamma_mod0_pr = np.log(1.0/(np.sqrt(2*np.pi)*gamma_mod0_s))-0.5*(gamma_mod0-gamma_mod0_m)**2/(gamma_mod0_s**2)
+    
+    pr = eps_pr + f_star_pr + S_star_pr + gamma_mod0_pr
+
+    return pr
+
 def lnprob(theta, x, y, invcov):
     lp = lnprior(theta)
     ll = lnlike(theta, x, y, invcov)

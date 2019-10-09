@@ -1,14 +1,24 @@
-CC = gcc
-CXX= g++
-FC = gfortran -fPIC
+CC = /usr/bin/gcc
+CXX= /usr/bin/g++
+FC = /usr/bin/gfortran 
+
+#CC = gcc
+#CXX= g++
+#FC = gfortran 
+
 #CC = icc
 #CXX= icpc
 #FC = ifort
 
-CFLAGS = -O3 -fPIC
-CXXFLAGS = -O3 -std=c++11 -DgFortran -fPIC
+#CC=/export/home/ethlau/anaconda3/bin/x86_64-conda_cos6-linux-gnu-gcc
+#CXX=/export/home/ethlau/anaconda3/bin/x86_64-conda_cos6-linux-gnu-g++
+#FC=/export/home/ethlau/anaconda3/bin/x86_64-conda_cos6-linux-gnu-gfortran
+CFLAGS = -fPIC -Wl,--no-undefined  
+CXXFLAGS = -std=c++11 -DgFortran -fPIC -Wl,--no-undefined 
+FC += -fPIC
 
-#CXXFLAGS = -O0 -g
+CFLAGS += -O2 -g
+CXXFLAGS += -O2 -g
 #CXXFLAGS += -DMPI_PARALLEL
 #CXXFLAGS += -DOUTPUT_NFW_DENSITY
 #CXXFLAGS += -DLONGIDS
@@ -17,19 +27,19 @@ CXXFLAGS = -O3 -std=c++11 -DgFortran -fPIC
 #CXXFLAGS += -DROCKSTAR_CONCENTRATION
 #FLINE = -D'LINE_FITS_FILE="/home/user/work/theory/atomdb_v3.0.9/apec_line.fits"'
 #FCOCO = -D'COCO_FITS_FILE="/home/user/work/theory/atomdb_v3.0.9/apec_coco.fits"'
-FLINE = -D'LINE_FITS_FILE="/home/fas/nagai/etl28/programs/Xrays/atomdb/atomdb_v3.0.9/apec_line.fits"'
-FCOCO = -D'COCO_FITS_FILE="/home/fas/nagai/etl28/programs/Xrays/atomdb/atomdb_v3.0.9/apec_coco.fits"'
+#FLINE = -D'LINE_FITS_FILE="/home/fas/nagai/etl28/programs/Xrays/atomdb/atomdb_v3.0.9/apec_line.fits"'
+#FCOCO = -D'COCO_FITS_FILE="/home/fas/nagai/etl28/programs/Xrays/atomdb/atomdb_v3.0.9/apec_coco.fits"'
+FLINE = -D'LINE_FITS_FILE="/home/ethlau/programs/atomdb_v3.0.9/apec_line.fits"'
+FCOCO = -D'COCO_FITS_FILE="/home/ethlau/programs/atomdb_v3.0.9/apec_coco.fits"'
 
-#PYENV=/home/user/anaconda3
-PYENV=/home/fas/nagai/etl28/programs/yt-conda
-CFLAGS += -I/home/fas/nagai/etl28/local/include
-CXXFLAGS += -I/home/fas/nagai/etl28/local/include -I./DK15
-CXXFLAGS += -Wall -Wunused-variable
-CLIBS = -lgsl -lgslcblas -lm
-CLIBS += -L/home/fas/nagai/etl28/local/lib/ -lfftw3 -lcfitsio -lifcore -lifport
-CLIBS += -lgfortran
+PYENV=/home/ethlau/anaconda3
+#PYENV=/home/fas/nagai/etl28/programs/yt-conda
+CFLAGS += -I${PYENV}/include 
+CXXFLAGS += -I${PYENV}/include -I./DK15
+CXXFLAGS += -Wall
 CXXFLAGS += -I${PYENV}/include/python3.6m -I${PYENV}/include -shared
-CLIBS += -L${PYENV}/lib -lboost_python36 -lboost_numpy36 -lpython3.6m
+CLIBS = -L${PYENV}/lib/ -lfftw3 -lcfitsio -lgsl -lgslcblas -lm -lboost_python36 -lboost_numpy36 -lpython3.6m
+CLIBS += -lgfortran
 
 #CFLAGS += -I/home/user/gsl-2.4/include -I/home/user/local/include
 #CXXFLAGS += -I/home/user/gsl-2.4/include -I/home/user/local/include -I./DK15
@@ -52,14 +62,18 @@ Apec/%.o: Apec/%.c Apec/%.h
 	$(CC) $(CFLAGS) $(FCOCO) $(FLINE) -I. -I./Apec -c $< -o $@
 
 objects= fftlog.o cdgamma.o drfftb.o drfftf.o drffti.o
-xx_power: xx_power.cpp $(objects) gas_model.o xray.o $(APEC_OBJS) $(DK15_OBJS)
-	$(CXX) $(CXXFLAGS) -o xx_power.so xx_power.cpp $(objects) gas_model.o xray.o $(APEC_OBJS) $(DK15_OBJS) $(CLIBS)
 
 xray.o: xray.c xray.h
 	$(CC) $(CFLAGS) -c xray.c
 
 gas_model.o: gas_model.cpp gas_model.h
-	$(CXX) $(CXXFLAGS) -c gas_model.cpp
+	$(CXX) $(CXXFLAGS) -I. -c gas_model.cpp
+
+xx_power: xx_power.cpp $(objects) gas_model.o xray.o $(APEC_OBJS) $(DK15_OBJS)
+	$(CXX) $(CXXFLAGS) -o xx_power.so xx_power.cpp $(objects) gas_model.o xray.o $(APEC_OBJS) $(DK15_OBJS) $(CLIBS)
+
+yy_power: yy_power.cpp $(objects) gas_model.o xray.o $(APEC_OBJS) $(DK15_OBJS)
+	$(CXX) $(CXXFLAGS) -o yy_power.so yy_power.cpp $(objects) gas_model.o xray.o $(APEC_OBJS) $(DK15_OBJS) $(CLIBS)
 
 clean:
-	/bin/rm -f *.o DK15/*.o Apec/*.o xx_power.so *~
+	/bin/rm -f *.o DK15/*.o Apec/*.o *.so *~

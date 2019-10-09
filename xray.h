@@ -12,8 +12,8 @@
 #define mlmin	    -6.00
 #define mlmax	    2.0
 #define rmin        1.e-6
-#define rmax        3.0
-#define nrmax       100
+#define rmax        4.0
+#define nrmax       200
 
 // ICM metallicity in units of Solar
 #define ABUNDANCE       0.2 

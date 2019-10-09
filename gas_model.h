@@ -494,7 +494,10 @@ double theta_mod(double x, double beta, double x_break, double npoly_mod) {
     // ---
     double th;
 
-    if (x>=x_break){
+    if (npoly_mod >= 1.e7) {
+        th = 1.0;
+    }
+    else if (x>=x_break){
         th = (1.0 - (beta*j(x)/(1.0+n)));
     }
     else if (x<x_break){
@@ -1502,11 +1505,11 @@ double return_xray_emissivity(double ngas, double T, double redshift){
     //T = return_T_mod(R500, r, x_break, npoly_mod);
 
     if ( T > 0.0) {
-        emis = interpolate_emission_table (T, redshift); // in ergs cm^3 /s
+        emis = interpolate_emission_table (T, redshift); // in cts cm^5 /s
         //emis = interpolate_emission_table (10.0, 0.01); // in ergs cm^3 /s
         ne = ngas * mmw / mu_e;
         nH = ne / 1.2;
-        emis *= ne * nH; // in ergs /cm^3 /s
+        emis *= ne * nH; // in cts/s/cm
     } else {
         emis =  0.0;
     }

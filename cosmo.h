@@ -25,7 +25,7 @@ class cosmo {
   cosmo(double inp1, double inp2, double inp3, double inp4, double inp5)
     {
       // cosmological params at z =0
-      H0 = inp1;
+      H0 = inp1; //in km/s/Mpc
       Omega_M = inp2;
       Omega_b = inp3;
       Omega_k = inp4;

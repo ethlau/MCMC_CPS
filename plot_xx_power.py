@@ -88,7 +88,7 @@ def cxb (theta) :
 
     xx_power.set_Flender_params(eps_f*1e-6, eps_DM, f_star, S_star, A_C, A_nt, B_nt, gamma_nt, gamma_mod0, gamma_mod_zslope, x_break, x_smooth, n_nt_mod, clump0, alpha_clump, beta_clump, gamma_clump)
 
-    return (xx_power.return_total_xsb()/(4.0*math.pi))
+    return (xx_power.return_total_xsb())
 
 
 def read_data (filename) :
@@ -131,11 +131,11 @@ def main ():
     n_s=0.96605
     inputPk="../input_pk/planck_2018_test_matterpower.dat"
     nH = 0.0
-    opt = 0
+    opt = 1
 
     xx_power.init_cosmology(H0, Omega_M, Omega_b, w0, Omega_k, n_s, nH, inputPk, opt)
 
-    ell = 10.**np.linspace(np.log10(10.),np.log10(3.e3),31)
+    ell = 10.**np.linspace(np.log10(10.),np.log10(1.e4),31)
 
     theta_fid = [4.0, 3.e-5 ,0.0250,0.120000,1.000000,0.180000,0.800000,0.500000,0.10000,1.720000,0.195000,0.010000,0.800000, 0.2, 1.0, 6.0, 3.0]
 
@@ -143,26 +143,28 @@ def main ():
 
     param_label_dict = {'eps_f':r'$\epsilon_f$', 'eps_DM':r'$\epsilon_{DM}$', 'f_star':r'$f_\star$', 'S_star':r'$S_\star$', 'A_C':r'$A_C$','alpha_nt':r'$\alpha_{nt}$', 'n_nt':r'$n_{nt}$', 'beta_nt':r'$\beta_{nt}$', 'gamma_mod0':r'$\Gamma_0$', 'gamma_mod_zslope':r'$\beta_\Gamma$', 'n_nt_mod':'$n_{nt,mod}$', 'clump0':r'$C_0$', 'alpha_clump':r'$\alpha_C$','beta_clump':r'$\beta_{C}$', 'gamma_clump':r'$\gamma_{C}$'}
 
-    rosat_ell, rosat_cl, rosat_var = read_data("../ROSAT/rosat_R4_R7_counts.txt")
-    rosat_cl *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
+    #rosat_ell, rosat_cl, rosat_var = read_data("../ROSAT/rosat_R4_R7_counts.txt")
+    rosat_ell, rosat_cl, rosat_var = read_data("../ROSAT/rosat_R4_R7_unabsorbed.txt")
+    #rosat_cl *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
     rosat_cl_err = np.sqrt(rosat_var)
-    rosat_cl_err *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
+    #rosat_cl_err *= rosat_ell*(rosat_ell+1.)/(2.0*math.pi)
     k_k, ell_k, beam_k, cl_k, cl_k_err = read_kolodzig ()
     cl_k /= beam_k
-    cl_k *= ell_k*(ell_k+1)/(2.0*math.pi)
+    #cl_k *= ell_k*(ell_k+1)/(2.0*math.pi)
  
     #params = [ 'eps_f', 'f_star', 'S_star', 'alpha_nt', 'n_nt', 'beta_nt', 'gamma_mod0', 'gamma_mod_zslope', 'clump0', 'alpha_clump', 'beta_clump', 'gamma_clump' ]
-    #params = [ 'eps_f', 'f_star', 'S_star', 'clump0', 'alpha_clump', 'beta_clump', 'gamma_clump' ]
-    params = [ 'eps_f' ]
+    params = [ 'eps_f', 'f_star', 'S_star', 'clump0', 'alpha_clump', 'beta_clump', 'gamma_clump', 'gamma_mod0' ]
+    #params = [ 'gamma_mod0' ]
     param_values = {
-        'eps_f':[4.0 ], 
-        #'eps_f':[1.0, 2.0, 4.0, 6.0, 8.0 ], 
-        'f_star':[0.01, 0.015, 0.02, 0.025, 0.03],
-        'S_star':[0.03, 0.06, 0.12, 0.24, 0.48],
-        'clump0':[0.01, 0.1, 1.0, 10.0, 100.0],
-        'alpha_clump':[0.02, 0.05, 1.0, 2.0, 4.0],
-        'beta_clump':[0.02, 0.05, 1.0, 2.0, 4.0],
-        'gamma_clump':[1.0, 2.0, 4.0, 8.0, 16.0]
+        #'eps_f':[4.0 ], 
+        'eps_f':[2.0, 4.0, 6.0, 8.0], 
+        'f_star':[0.015, 0.02, 0.025, 0.03],
+        'S_star':[0.06, 0.12, 0.24, 0.48],
+        'clump0':[0.1, 1.0, 3.0, 10.0],
+        'alpha_clump':[0.05, 1.0, 2.0, 4.0],
+        'beta_clump':[0.05, 1.0, 2.0, 4.0],
+        'gamma_clump':[2.0, 4.0, 8.0, 10.0],
+        'gamma_mod0':[-0.1, 0.1, 1.0, 1.6667]
     }
 
 
@@ -170,14 +172,14 @@ def main ():
 
         param_ind = param_ind_dict[param]
         param_val_list = param_values[param]
-        color_list = ['C0', 'C1', 'C', 'C3', 'C4']
+        color_list = ['C0', 'C1', 'C2', 'C3']
+        ls_list = [':','-','--', '-.']
 
         f = plt.figure( figsize=(4,4) )
         ax = f.add_axes([0.21,0.16,0.75,0.75])
 
-        ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', fmt='o', label=r"observed", markersize = 5)
-
-        #ax.errorbar(ell_k, cl_k, yerr = cl_k_err, label=r'Kolodzig+18', color='r', fmt='+', markersize=5)
+        #ax.errorbar(rosat_ell, rosat_cl, yerr = rosat_cl_err, color='k', fmt='o', label=r"ROSAT", markersize = 3)
+        #ax.errorbar(ell_k, cl_k, yerr = cl_k_err, label=r'Chandra', color='r', fmt='+', markersize=3)
         cl_list = []
         for counter ,param_val in enumerate(param_values[param]) :
             theta = theta_fid.copy()
@@ -188,33 +190,32 @@ def main ():
             cl = power (ell, theta)
             end = time.time()
             print("Elapsed time: %s" % (end - start))
-            cl *= ell*(ell+1)/(2.0*math.pi)
+            #cl *= ell*(ell+1)/(2.0*math.pi)
+
             #psn = psn*ell*(ell+1)/(2.0*math.pi)
             #cl_total *= ell*(ell+1)/(2.0*math.pi)
-            cl_list.append(cl)
+            #cl_list.append(cl)
 
             label_str = param_label_dict[param]+r'$= %.3f $'% (param_val)
             #if param == 'eps_f' :
             #    label_str = param_label_dict[param]+r'$= %.1f$'% (param_val)
             #if param == 'clump0' :
             #    label_str = param_label_dict[param]+r'$= %.1f$'% (param_val+1)
-            #ax.plot (ell, cl_total, ls = '-', color=color_list[counter], label=label_str)
-            ax.plot (ell, cl, ls = '-', color=color_list[counter], label=label_str)
-            #ax.plot (ell, psn, ls = ':', color=color_list[counter])
+            ax.plot (ell, cl, ls = '--', color=color_list[counter], label=label_str)
 
-        ax.set_xlim ( 10, 1e4 )
-        #ax.set_ylim ( 1e-19, 1e-14)
-        #ax.set_xlabel(r'$\ell$')
-        ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}^{xx}/2\pi\,[{\rm erg^{2}s^{-2}cm^{-4}sr^{-2}}]$')
+        ax.set_xlim ( 30, 1e4 )
+        ax.set_ylim ( 1e-25, 1e-19)
+        ax.set_xlabel(r'$\ell$')
+        #ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}^{xx}/2\pi\,[{\rm cts^2 s^{-2}arcmin^{-4}}]$')
         #ax.set_ylabel(r'$C_{\ell}\,[{\rm erg^{2}s^{-2}cm^{-4}sr^{-2}}]$')
-        #ax.set_ylabel(r'$\ell(\ell+1)C_{\ell}^{xx}/2\pi\,[{\rm keV^{2}s^{-2}cm^{-4}sr^{-2}}]$')
+        ax.set_ylabel(r'$C_{\ell}\,[{\rm ergs^{2}s^{-2}cm^{-4}sr^{-2}}]$')
 
         ax.set_xscale('log')
         ax.set_yscale('log')
-        ax.legend(loc='upper left', prop={'size': 10})
+        ax.legend(loc='lower left', prop={'size': 10})
 
         #outname = '../plots/'+param+'_xx_power.pdf'
-        outname = param+'_xx_power.png'
+        outname = param+'_xx_power.pdf'
         f.savefig(outname)
         f.clf()
     

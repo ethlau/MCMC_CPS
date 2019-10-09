@@ -20,7 +20,7 @@ dirname=str(argvs[1])
 ofname=str(argvs[2])
 '''
 #dirname="/home/ethlau/projects/Power_Spectrum/halo_model_Flender/MCMC/test/2019-08-19"
-dirname="/home/ethlau/projects/Power_Spectrum/halo_model_Flender/MCMC/test/2019-09-04"
+dirname="/home/ethlau/projects/Power_Spectrum/halo_model_Flender/MCMC/log/2019-09-04"
 ofname='test.pdf'
 filename_backend = os.path.join(dirname, "backend.h5")
 
@@ -36,7 +36,7 @@ print (full_samples.shape)
 #labels=[r"$\log_{10}(10^{6}\epsilon_{f})$", r"$\log_{10}f_{*}$", r"$\log_{10}(C_0-1)$"]
 #labels=[r"$10^{6}\epsilon_{f}$", r"$f_{*}$", r"$S_{*}$", r"$C_0-1$", r"$\alpha_C$"]
 #labels=[r"$\log_{10}(10^{6}\epsilon_{f})$", r"$\log_{10}(f_{*})$", r"$\log_{10}(S_{*})$", r"$\log_{10}(C_0-1)$", r"$\log_{10}(\alpha_C)$", r"$\log_{10}(\beta_C)$", r"$\log_{10}(\gamma_C)$"]
-labels=[r"$(10^{6}\epsilon_{f})$", r"$f_{*}$", r"$S_{*}$", r"$(C_0-1)$", r"$\alpha_C$", r"$\beta_C$", r"$\gamma_C$", r"$\Gamma_0$"]
+labels=[r"$(10^{6}\epsilon_{f})$", r"$f_{*}$", r"$S_{*}$", r"$\Gamma_0$", r"$(C_0-1)$", r"$\alpha_C$", r"$\beta_C$", r"$\gamma_C$"]
 fig, axes = plt.subplots(ndim, figsize=(10, 7), sharex=True)
 for i in range(ndim):
     ax = axes[i]
@@ -47,7 +47,7 @@ for i in range(ndim):
 
 axes[-1].set_xlabel("step number")
 
-fig.savefig("chains.png")
+fig.savefig("chains_log.png")
 
 #tau = reader.get_autocorr_time()
 #burnin = int(2*np.max(tau))
@@ -94,11 +94,11 @@ for i in np.arange(ndim) :
 
 #fig_c = corner.corner(samples, show_titles=True, plot_datapoints=False)
 #range=[(8.0, 9.0),(0.002, 0.0030),(0.02, 0.22), (0.0001, 0.014), (2.50, 3.00)]) 
-fig_c = corner.corner(samples,labels=labels, weights=None, quantiles=[0.16, 0.50, 0.84], levels=[0.68, 0.95], show_titles=True, plot_datapoints=False, title_kwargs={"fontsize": 14}, smooth=1.0)
-fig_c.savefig("corner_test.png")
+fig_c = corner.corner(10**samples,labels=labels, weights=None, quantiles=[0.16, 0.50, 0.84], levels=[0.68, 0.95], show_titles=True, plot_datapoints=False, title_kwargs={"fontsize": 14}, smooth=1.0)
+fig_c.savefig("corner_log.png")
 
 for i in range(ndim):
-    mcmc = np.percentile(samples[:, i], [0.02,15.6,50,84.1,97.7])
+    mcmc = np.percentile(10**samples[:, i], [0.02,15.6,50,84.1,97.7])
     #q = np.diff(mcmc)
     q = mcmc - mcmc[2]
     #print(mcmc[2], q[0], q[1], q[2], q[3], labels[i])

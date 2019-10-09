@@ -22,7 +22,7 @@ size = comm.Get_size()
 
 if rank == 0 :
     now = datetime.datetime.now()
-    dirname = "../halo_model_Flender/MCMC/flat/{0:%Y-%m-%d}".format(now)
+    dirname = "../halo_model_Flender/MCMC/log/{0:%Y-%m-%d}".format(now)
     #dirname = "../halo_model_Flender/MCMC/gaussian/{0:%Y-%m-%d}".format(now)
     if os.path.exists(dirname) == False:
         os.mkdir(dirname)
@@ -101,13 +101,14 @@ def lnlike(theta, x, y, invcov):
     '''
     eps_f, f_star, S_star, gamma_mod0, clump0, alpha_clump, beta_clump, gamma_clump = theta
     
-    #eps_f = 10**eps_f
-    #f_star = 10**f_star
-    #clump0 = 10**clump0
-    #S_star = 10**S_star
-    #alpha_clump = 10**alpha_clump
-    #beta_clump = 10**beta_clump
-    #gamma_clump = 10**gamma_clump
+    eps_f = 10**eps_f
+    f_star = 10**f_star
+    S_star = 10**S_star
+    gamma_mod0 = 10**gamma_mod0
+    clump0 = 10**clump0
+    alpha_clump = 10**alpha_clump
+    beta_clump = 10**beta_clump
+    gamma_clump = 10**gamma_clump
 
     #fix DM profile
     eps_DM = 3e-5
@@ -148,11 +149,37 @@ def lnprior(theta):
 
     ## see https://arxiv.org/pdf/1610.08029.pdf
     ## Flat priors on all parameters
-    if 1.09 <= eps_f <= 8.79 and 0.023 <= f_star <= 0.029 and 0.02 <= S_star <= 0.22 and 0.05 <= gamma_mod0 <= 0.21 and  0.01 <= clump0 <= 10.0 and 0.01 <= alpha_clump <= 10.0 and 0.01 <= beta_clump <= 10.0 and 0.01 <= gamma_clump <= 10.0 : 
+    #if 1.09 <= eps_f <= 8.79 and 0.023 <= f_star <= 0.029 and 0.02 <= S_star <= 0.22 and 0.05 <= gamma_mod0 <= 0.21 and  0.01 <= clump0 <= 10.0 and 0.01 <= alpha_clump <= 10.0 and 0.01 <= beta_clump <= 10.0 and 0.01 <= gamma_clump <= 10.0 : 
+    if np.log10(1.09) <= eps_f <= np.log10(8.79) and np.log10(0.023) <= f_star <= np.log10(0.029) and np.log10(0.02) <= S_star <= np.log10(0.22) and np.log10(0.05) <= gamma_mod0 <= np.log10(0.21) and  -2 <= clump0 <= 1 and -2 <= alpha_clump <= 1 and -2 <= beta_clump <= 1 and -2 <= gamma_clump <= 1 :
         return 0.0
     else :
         return -np.inf
     
+    ## Gaussian priors on non-clumping parameters
+    
+    #if not 0.01 <= clump0 <= 10.0 and 0.01 <= alpha_clump <= 10.0 and 0.01 <= beta_clump <= 10.0 and 0.01 <= gamma_clump <= 10.0 :
+    #    return -np.inf
+
+    ## see https://stackoverflow.com/questions/49810234/using-emcee-with-gaussian-priors
+    #eps_m = 3.97
+    #eps_s = 4.82/2.0
+    #f_star_m = 0.026
+    #f_star_s = 0.003/2.0
+    #S_star_m = 0.12
+    #S_star_s = 0.10/2.0
+ 
+    #gamma_mod0_m = 0.10
+    #gamma_mod0_s = 0.11/2.0
+
+    #eps_pr = np.log(1.0/(np.sqrt(2*np.pi)*eps_s))-0.5*(eps_f-eps_m)**2/(eps_s**2)
+    #f_star_pr = np.log(1.0/(np.sqrt(2*np.pi)*f_star_s))-0.5*(f_star-f_star_m)**2/(f_star_s**2)
+    #S_star_pr = np.log(1.0/(np.sqrt(2*np.pi)*S_star_s))-0.5*(S_star-S_star_m)**2/(S_star_s**2)
+    #gamma_mod0_pr = np.log(1.0/(np.sqrt(2*np.pi)*gamma_mod0_s))-0.5*(gamma_mod0-gamma_mod0_m)**2/(gamma_mod0_s**2)
+    
+    #pr = eps_pr + f_star_pr + S_star_pr + gamma_mod0_pr
+
+    #return pr
+
 def lnprob(theta, x, y, invcov):
     lp = lnprior(theta)
     ll = lnlike(theta, x, y, invcov)
@@ -203,9 +230,7 @@ cl = comm.bcast(cl, root = 0)
 icov = comm.bcast(icov, root = 0)
 
 #initial paramaters for MCMC
-#eps_f, f_star, S_star, gamma_mod0, gamma_mod_zslope, clump0, clump_zslope, log_noise
-#pinit  = np.array([np.log10(3.97), np.log10(0.026), np.log10(0.12), np.log10(1.0), np.log10(1.0), np.log10(3.0), np.log10(3.0)])
-pinit  = np.array([3.97, 0.026, 0.12, 0.10, 1.0, 1.0, 3.0, 3.0])
+pinit  = np.log10(np.array([3.97, 0.026, 0.12, 0.10, 1.0, 1.0, 3.0, 3.0]))
 
 ndim = pinit.size
 
